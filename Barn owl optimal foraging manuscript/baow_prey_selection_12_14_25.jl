@@ -7,7 +7,6 @@ using Statistics
 using GLM
 using MixedModels
 using StatsBase
-#using HypothesisTests
 using FreqTables
 using ColorSchemes
 using CategoricalArrays
