@@ -14,6 +14,10 @@ using CategoricalArrays
 dir = "C:/Users/jdelong2/OneDrive - University of Nebraska/Projects in progress/Barn_owl_global_diet/"
 cd(dir)
 
+pwd() # check and confirm you are in the directory
+dir = "C:/Users/johnp/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript"
+cd(dir)
+
 # to create the environment, in the pkg repl (]), type generate BarnOwlGlobalDiet
 # to activate the environment, in the pkg repl (]), type activate BarnOwlGlobalDiet
 
