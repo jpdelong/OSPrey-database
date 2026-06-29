@@ -166,10 +166,7 @@ numb_prey_spp = zeros(Float64, howmanystudies)
 baow_a_store = zeros(Float64, howmanystudies)
 number_prey_meeting_rule = zeros(Float64, howmanystudies)
 number_prey_testing_rule = zeros(Float64, howmanystudies)
-predicted_largest_prey_freq = zeros(Float64, howmanystudies)
 observed_largest_prey_freq = zeros(Float64, howmanystudies)
-predicted_smallest_prey_freq = zeros(Float64, howmanystudies)
-observed_smallest_prey_freq = zeros(Float64, howmanystudies)
 NE_rate = Array{Union{Float64,Missing}}(missing, howmanystudies)
 sum_R = zeros(Float64, howmanystudies)
 NumPositiveInStudy = zeros(Float64, howmanystudies)
@@ -242,41 +239,7 @@ for gg = 1:length(candidate_h) # in this loop, run through different guess for h
 
             # add the mean predicted density to the data frame
             df_diet[!, :LogDensity] = df_predict_y
-            df_diet[!, :Density] = exp.(df_diet.LogDensity) # convert to non-log University
-
-            #= ####################################################################################
-            # here we need to predict the density from the mass and the order
-            # using the posteriors of the intercept and scaling parameters from the allometry analysis
-            # need to estimate a density for each of the posterior samples (given by length of df_chains)
-            # all these estimates need to be added to df_diet and then the can be compared to the total as the OFT test
-            density_post = zeros(Float64,length(numb_diet),size(df_chains,1))
-            df_predict_y = zeros(Float64,length(numb_diet))
-            for jjj = 1:length(numb_diet)
-                # grab the slopes
-                column_name = string("orders",df_diet.group_idx[jjj]) # get the name of the right slope
-                idx = columnindex(df_chains, column_name) # determine what column that is in
-                fitted_beta_mass = df_chains[:,idx] # grab the value
-                fitted_beta_mass_median = median(df_chains[:,idx]) # grab the value
-
-                # grab the intercepts
-                column_name = string("Intercept",df_diet.group_idx[jjj])
-                idx = columnindex(df_chains, column_name)
-                fitted_int = df_chains[:,idx]
-                fitted_int_median = median(df_chains[:,idx])
-                # calculate the predicted density
-                predictions = fitted_int .+ fitted_beta_mass .* df_diet.LogMass[jjj]
-                # flip it and exponentiate it to get the actual density
-                density_post[jjj,1:size(df_chains,1)] = exp.(predictions)' # calculate the fitted y
-
-                # also need to do it just for the median
-                df_predict_y[jjj] = fitted_int_median + fitted_beta_mass_median * df_diet.LogMass[jjj]
-            end
-            
-            # to add the whole set of densities calculated from the posterior sample,
-            # first transform it the matrix to a dataframe and then hcat them
-            mat_df = DataFrame(density_post, :auto)
-            df_diet = hcat(df_diet, mat_df)
-            =#
+            df_diet[!, :Density] = exp.(df_diet.LogDensity) # convert to non-log
 
             #####################################################################################
             # calculate frequencies of diet items
@@ -285,32 +248,14 @@ for gg = 1:length(candidate_h) # in this loop, run through different guess for h
 
             # here find the biggest prey and predict its frequency
             row_biggest = findall(df_diet.PreyMass .== maximum(df_diet.PreyMass))
-            rows_except_biggest = findall(df_diet.PreyMass .< maximum(df_diet.PreyMass))
-            phi = sum((df_diet.PreyMass[rows_except_biggest] ./ maximum(df_diet.PreyMass)) .^ 0 .* df_diet.Density[rows_except_biggest]) ./ df_diet.Density[row_biggest]
-            predicted_largest_prey_freq[i] = 1 / (1 + phi[])
             observed_largest_prey_freq[i] = df_diet.Frequencies[row_biggest][]
 
-            #= here find the smallest prey and predict its frequency
-            row_smallest = findall(df_diet.PreyMass .== minimum(df_diet.PreyMass))[1]
-            rows_except_smallest = findall(df_diet.PreyMass .> minimum(df_diet.PreyMass))
-            phi = sum((df_diet.PreyMass[rows_except_biggest] ./ maximum(df_diet.PreyMass)) .^ 0 .* df_diet.Density[rows_except_biggest]) ./ df_diet.Density[row_biggest]
-            predicted_smallest_prey_freq[i] = 1 / (1 + phi[])
-            observed_smallest_prey_freq[i] = df_diet.Frequencies[row_smallest][]
-=#
-
-            # first calculate the rank of prey by density, highest to lowest
+            # calculate the rank of prey by density, highest to lowest
             df_rank_density = transform!(sort(df_diet, :Density), :Density, :Density => eachindex => :DensRank)
             # then calculate the rank of prey by count, highest to lowest
             df_ranked = transform!(sort(df_rank_density, :CountInt), :CountInt, :CountInt => eachindex => :CountRank)
             # then calculate the rank of prey by body mass, highest to lowest
             df_ranked = transform!(sort(df_ranked, :PreyMass), :PreyMass, :PreyMass => eachindex => :MassRank)
-
-            #####################################################################################
-            # APPROACH 1 -- determine if the most common prey is the biggest or the most dense
-            #=    row_max_count = findall(df_ranked.CountInt .== maximum(df_ranked.CountInt)) # find row of most common
-                row_max_mass = findall(df_ranked.PreyMass .== maximum(df_ranked.PreyMass)) # find row of biggest
-                row_max_dens = findall(df_ranked.Density .== maximum(df_ranked.Density)) # find row of most dense
-=#
 
             # APPROACH 2 -- do regressions between ranks
                 # make and plot a least-squares line for the count-density rank relationship
@@ -329,7 +274,6 @@ for gg = 1:length(candidate_h) # in this loop, run through different guess for h
                 numb_prey_spp[i] = size(df_ranked,1)
 
                 pval_dens[i] = coeftable(lsline_count).cols[4][2]
-
 
             # APPROACH 3 -- check each prey for optimality
             mean_ppp = mean(skipmissing(df_meta.PreyPerPellet))
@@ -390,13 +334,8 @@ df_meta[!, :dens_slopes] = dens_slopes
 df_meta[!, :pval_dens] = pval_dens
 df_meta[!, :numb_prey] = numb_prey
 df_meta[!, :numb_prey_spp] = numb_prey_spp
-df_meta[!, :mass_of_most_common_dropones] = mass_of_most_common_dropones
-df_meta[!, :IsTopPreyBiggest] = IsTopPreyBiggest
-df_meta[!, :smallest_prey_mass] = smallest_prey_mass
-df_meta[!, :largest_prey_mass] = largest_prey_mass
 df_meta[!, :baow_a] = baow_a_store
 df_meta[!, :mass_range] = mass_range
-df_meta[!, :pred_largest_prey_freq] = predicted_largest_prey_freq
 df_meta[!, :obs_largest_prey_freq] = observed_largest_prey_freq
 df_meta[!, :NE_intake] = NE_rate
 df_meta[!, :sum_R] = sum_R
@@ -408,21 +347,16 @@ df_meta[!, :NumPos] = NumPositiveInStudy
 CSV.write("BarnOwlProcessed.csv", df_meta)
 # ====================================================================
 
-minimum(df_meta.numb_prey_spp)
-maximum(df_meta.numb_prey_spp)
-maximum(df_meta.NumPos)
-
+# ===============================================================
+# estimate the lower bound of the handling time
+# ===============================================================
 h_lower_bound = 1/mean(skipmissing(df_meta.PreyPerPellet))/3
-#yscale = log10, xscale = log10
 
 # ===============================================================
 # coming back to the net energy gain figure - main OFT figure
 # ===============================================================
 f_net_energy
 prop_prey_meeting_rule = num_NE_diffs_over_zero / num_NE_diffs_tested
-    ax_ofthist = Axis(f_net_energy[1, 2], xlabel = "Difference", ylabel = "Observed frequency")
-        #xlims!(ax_ofthist,[-100, 10000])
-    hist!(ax_ofthist,OptForTests[:], color = :white, strokewidth = 1, strokecolor = colorgrad[8])
 save("Net_energy_return_of_prey_log.png",f_net_energy)
 # ===================================================
 
@@ -443,18 +377,6 @@ f_h_by_OF = Figure()
     save("VariationInH.png",f_h_by_OF)
 
 # ====================================================================
-# Plot the families against the number of diets that family occurs in
-# ====================================================================
-sums_by_family[!, :Diets] = sum(family_matrix, dims=1)'[:] # add the sum of the family matrix to the families summary
-sums_by_family = sort(sums_by_family, :Diets, rev=true) # sort the diets from highest to lowest
-
-f_families = Figure()
-    ax_fams = Axis(f_families[1, 1], xticks = (1:46, sums_by_family.PreyFamily), xticklabelrotation = 90*pi/180, xlabel = "Family", ylabel = "Number of diets")
-    barplot!(ax_fams,1:1:46, sums_by_family.Diets)
-    save("FamiliesInDiets.png",f_families)
-# ====================================================================
-
-# ====================================================================
 # Plot the body mass distribution of prey at the species level
 # ====================================================================
 df_mass_by_species = combine(groupby(df_baow, :PreyScientificName), :PreyMass .=> mean)
@@ -463,72 +385,6 @@ f_miss_dist = Figure()
     ax_mass_dist = Axis(f_miss_dist[1, 1], xlabel = "Body mass (g)", ylabel = "Frequency")
     hist!(log10.(df_mass_by_species.PreyMass_mean), color = :white, strokewidth = 1, strokecolor = colorgrad[8])
 # ====================================================================
-
-# ====================================================================
-# Analyze the variation in the number of sub-optimal cases per diet
-# ====================================================================
-
-# subset the data
-df_meta_subset1 = dropmissing(df_meta,:PreyPerPellet)
-    df_meta_subset1 = df_meta_subset1[findall(df_meta_subset1.numb_prey_spp .!= 0),:] # drop rows with 0 prey
-    minimum(df_meta_subset1.NumPos)
-    maximum(df_meta_subset1.NumPos)
-
-    df_meta_subset1 = df_meta_subset1[findall(df_meta_subset1.NumPos .!= 0),:] # drop rows with 0 suboptimal
-
-f_negs = Figure()
-    ax_negs = Axis(f_negs[1, 1], xlabel = "Number of negs", ylabel = "Frequency")
-    hist!(df_meta_subset1.NumPos, color = :white, strokewidth = 1, strokecolor = colorgrad[8])
-
-    sum(df_meta_subset1.NumPos)
-    num_NE_diffs_tested - num_NE_diffs_over_zero
-
-# use a mixed glm to test predictors
-neg_model1 = glm(@formula(NumPos ~ numb_prey_spp), df_meta_subset1, Poisson(), LogLink())
-neg_model1 = glm(@formula(NumPos ~ RERichness), df_meta_subset1, Poisson(), LogLink())
-neg_model1 = glm(@formula(NumPos ~ FreqBirds), df_meta_subset1, Poisson(), LogLink())
-
-
-
-neg_model1 = glm(@formula(NumPos ~ numb_prey_spp + NE_intake + sum_R + FreqBirds + RERichness), df_meta_subset1, Poisson(), LogLink())
-model_1 = fit(MixedModel, @formula(NumPos ~ sum_R + log(numb_prey_spp) + NE_intake + FreqBirds + RERichness + (1|ecozone)), df_meta_subset1, NegativeBinomial(2.0), LogLink())
-model_1 = fit(MixedModel, @formula(NumPos ~ log(sum_R) + log(numb_prey_spp) + log(NE_intake) + FreqBirds + RERichness + (1|ecozone)), df_meta_subset1, Poisson(), LogLink())
-
-model_1 = fit(MixedModel, @formula(NumPos ~ sum_R + numb_prey_spp + FreqBirds + RERichness + (1|ecozone)), df_meta_subset1, Poisson(), LogLink())
-neg_model1 = glm(@formula(NumPos ~ numb_prey_spp + FreqBirds + RERichness), df_meta_subset1, Poisson(), LogLink())
-
-neg_model1 = lm(@formula(sum_R ~ numb_prey_spp), df_meta_subset1)
-
-
-
-
-
-# ====================================================================
-df_mass_by_species = combine(groupby(df_baow, :PreyScientificName), :PreyMass .=> mean)
-# ====================================================================
-
-
-f_test = Figure()
-    ax_test = Axis(f_test[1, 1], xlabel = "Predicted frequency of largest prey", ylabel = "Observed frequency of largest prey")
-    a1 = scatter!(ax_test,predicted_largest_prey_freq, observed_largest_prey_freq, color = :black, alpha=0.4)
-    lines!(ax_test,0:1,0:1,color = :black, linewidth=2)
-    
-    ax_smallest = Axis(f_test[1, 2], xlabel = "Predicted frequency of smallest prey", ylabel = "Observed frequency of smallest prey")
-    a1 = scatter!(ax_smallest,predicted_smallest_prey_freq, observed_smallest_prey_freq, color = :black, alpha=0.4)
-    lines!(ax_smallest,0:1,0:1,color = :black, linewidth=2)
-    
-    ax_cross = Axis(f_test[1, 3], xlabel = "Observed frequency of largest prey", ylabel = "Observed frequency of smallest prey")
-    a1 = scatter!(ax_cross,observed_largest_prey_freq, observed_smallest_prey_freq, color = :black, alpha=0.4)
-    lines!(ax_cross,0:1,0:1,color = :black, linewidth=2)
-
-    save("Largest_prey_predicted_observed.png",f_test)
-
-
-
-sum(df_meta.IsTopPreyMostDense)
-sum(df_meta.IsTopPreyBiggest)
-
-
 
 # ===================================================================
 # coming back to the rank difference against prey body mass figure
@@ -542,22 +398,18 @@ lines!(ax_mass_rank,2:4e3,0:0,color = :black, linewidth=2)
 # ===============================================================
 # coming back to the density and mass rank correlations figure
 # ===============================================================
+f_ranks
     # some regressions don't have enough points to work
     df_tests = dropmissing(df_meta,:dens_slopes)
-    #df_tests.pval_mass = replace(df_tests.pval_mass, NaN=>missing)
-    #df_tests = dropmissing(df_tests,:pval_mass)
 
     length(df_tests.dens_slopes[findall(df_tests.dens_slopes .> 0.0)]) / size(df_tests,1)
 
     # draw a 1:1 line overtop
     lines!(ax_dens,1:20,1:20,color = :black, linewidth=2)
         text!(ax_dens,(20,18), text = "1:1")
-    #lines!(ax_mass,1:20,1:20,color = :black, linewidth=2)
-    #    text!(ax_mass,(20,18),text = "1:1")
 
     hist!(ax_hist_dens,df_tests.dens_slopes, color = :white, strokewidth = 1, strokecolor = colorgrad[8])
         lines!(ax_hist_dens,0:0,0:100,color = :black, linewidth=2)
-    #hist!(ax_hist_mass,df_tests.mass_slopes, color = :white, strokewidth = 1, strokecolor = :blue)
     save("Density_count_correlations.png",f_ranks)
 
 # ===================================================
@@ -584,27 +436,15 @@ diversity_test = Figure()
    
     new_x = DataFrame(l_re = range(minimum(df_meta_subset.l_re), maximum(df_meta_subset.l_re), length=10))
     df_predict_y = predict(model_richness, new_x, interval=:confidence, level = 0.95)
+    # for some reason the predictions data type is coming out weird, so change it
+    df_predict_y[!,:prediction] = convert.(Float64,df_predict_y[!,:prediction])
+    df_predict_y[!,:lower] = convert.(Float64,df_predict_y[!,:lower])
+    df_predict_y[!,:upper] = convert.(Float64,df_predict_y[!,:upper])
+
+    band!(ax_div,new_x.l_re,df_predict_y.lower,df_predict_y.upper, color = (:gray, 0.2))
     rod = lines!(ax_div,new_x.l_re, df_predict_y.prediction, linewidth = 2, color = :black)
-        band!(ax_div,new_x.l_re,df_predict_y.lower,df_predict_y.upper; color = (:black, 0.2))
 
     save("Prey_richness.png",diversity_test)
-
-#=
-ShannEnt_regression = lm(@formula(ShannEnt_rare ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-density_regression = lm(@formula(dens_slopes ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-ShannEnt_residuals = df_meta.ShannEnt_rare - predict(ShannEnt_regression, df_meta)
-density_residuals = df_meta.dens_slopes - predict(density_regression, df_meta)
-
-df_resid = DataFrame(ShannEnt_rare = ShannEnt_residuals, dens_slopes = density_residuals)
-    of1 = lm(@formula(dens_slopes ~ ShannEnt_rare), df_resid)
-
-f_partials = Figure()
-    ax_part1 = Axis(f_partials[1, 1], xlabel = "Residual Shannon entropy", ylabel = "Residual density slopes")
-    p1 = scatter!(ax_part1,df_resid.ShannEnt_rare, df_resid.dens_slopes,alpha=0.6)
-    new_x_for_lsline = DataFrame(ShannEnt_rare = [minimum(skipmissing(df_resid.ShannEnt_rare)):0.1:maximum(skipmissing(df_resid.ShannEnt_rare));]) # make new x
-            predict_y = predict(of1,new_x_for_lsline) # predict new y variable
-            lines!(ax_part1,new_x_for_lsline.ShannEnt_rare,predict_y)
-=#
 
 # ===================================================
 # try to explain variation in density slopes
@@ -631,16 +471,6 @@ model_1 = fit(MixedModel, @formula(sum_R ~ numb_prey_spp + (1|ecozone)), df_meta
 model_NE_intake = fit(MixedModel, @formula(dens_slopes ~ NE_intake + (1|ecozone)), df_meta)
 
 
-
-
-# first test the prediction that mass range would be
-density_model1 = lm(@formula(dens_slopes ~ mass_range), df_meta)
-f_mass_range = Figure()
-    ax_mr = Axis(f_mass_range[1, 1], xlabel = "Mass range", ylabel = "Density slopes")
-                #ylims!(ax_mr,0,1)
-    p1 = scatter!(ax_mr,df_meta.mass_range, df_meta.dens_slopes,alpha=0.6)
-    
-r2(density_model1)
 
 
 
@@ -675,185 +505,3 @@ lmm1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + (1|ecozone
 r2(lmm1)
 
 
-
-
-
-# partial regression dens_slopes against Shannon entropy
-mass_range_regression = lm(@formula(mass_range ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-density_regression = lm(@formula(dens_slopes ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-mass_range_residuals = df_meta.mass_range - predict(ShannEnt_regression, df_meta)
-density_residuals = df_meta.dens_slopes - predict(density_regression, df_meta)
-
-df_resid = DataFrame(mass_range = ShannEnt_residuals, dens_slopes = density_residuals)
-    of1 = lm(@formula(dens_slopes ~ mass_range), df_resid)
-
-f_partials = Figure()
-    ax_part1 = Axis(f_partials[1, 1], xlabel = "Residual Shannon entropy", ylabel = "Residual density slopes")
-    p1 = scatter!(ax_part1,df_resid.ShannEnt_rare, df_resid.dens_slopes,alpha=0.6)
-    new_x_for_lsline = DataFrame(ShannEnt_rare = [minimum(skipmissing(df_resid.ShannEnt_rare)):0.1:maximum(skipmissing(df_resid.ShannEnt_rare));]) # make new x
-            predict_y = predict(of1,new_x_for_lsline) # predict new y variable
-            lines!(ax_part1,new_x_for_lsline.ShannEnt_rare,predict_y)
-
-
-
-
-# run some linear models to see if things are related to density slopes
-density_model1 = lm(@formula(dens_slopes ~ ShannEnt_rare), df_meta)
-density_model2 = lm(@formula(dens_slopes ~ DietRichness_rare), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ ShannEnt_rare + DietRichness_rare), df_meta)
-
-density_model1 = lm(@formula(dens_slopes ~ numb_prey), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ largest_prey_mass), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ smallest_prey_mass), df_meta)
-
-density_model1 = lm(@formula(dens_slopes ~ PreyPerPellet), df_meta)
-
-
-density_model1 = lm(@formula(dens_slopes ~ ShannEnt_rare + DietRichness_rare + PreyPerPellet + mass_range), df_meta)
-
-
-r2(density_model1)
-
-density_model1 = lm(@formula(dens_slopes ~ DietRichness_rare), df_meta)
-density_model1 = lm(@formula(mass_range ~ largest_prey_mass), df_meta)
-
-
-# =========================================================
-# partial regression dens_slopes against Shannon entropy
-# =========================================================
-ShannEnt_regression = lm(@formula(ShannEnt_rare ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-density_regression = lm(@formula(dens_slopes ~ DietRichness_rare + PreyPerPellet + largest_prey_mass), df_meta)
-ShannEnt_residuals = df_meta.ShannEnt_rare - predict(ShannEnt_regression, df_meta)
-density_residuals = df_meta.dens_slopes - predict(density_regression, df_meta)
-
-df_resid = DataFrame(ShannEnt_rare = ShannEnt_residuals, dens_slopes = density_residuals)
-    of1 = lm(@formula(dens_slopes ~ ShannEnt_rare), df_resid)
-
-f_partials = Figure()
-    ax_part1 = Axis(f_partials[1, 1], xlabel = "Residual Shannon entropy", ylabel = "Residual density slopes")
-    p1 = scatter!(ax_part1,df_resid.ShannEnt_rare, df_resid.dens_slopes,alpha=0.6)
-    new_x_for_lsline = DataFrame(ShannEnt_rare = [minimum(skipmissing(df_resid.ShannEnt_rare)):0.1:maximum(skipmissing(df_resid.ShannEnt_rare));]) # make new x
-            predict_y = predict(of1,new_x_for_lsline) # predict new y variable
-            lines!(ax_part1,new_x_for_lsline.ShannEnt_rare,predict_y)
-
-
-density_model1 = lm(@formula(PreyPerPellet ~ DietRichness_rare), df_meta)
-
-
-
-    of1 = lm(@formula(dens_slopes ~ Sim_slopes_opt), df_meta)
-    of1 = lm(@formula(dens_slopes ~ Sim_slopes_rand), df_meta)
-
-
-
-f_entropy = Figure()
-    ax_ent = Axis(f_entropy[1, 1], xlabel = "Sim_slopes_rand", ylabel = "dens_slopes")
-    hm = scatter!(ax_ent,df_meta.Sim_slopes_opt, df_meta.dens_slopes,alpha=0.4)
-    hm2 = scatter!(ax_ent,df_meta.Sim_slopes_rand, df_meta.dens_slopes,alpha=0.4)
-
-
-df_meta[!, :pval_mass] = pval_mass
-
-    include("min_max_entropy.jl")
-
-    df_meta_reduced = df_meta[findall(df_meta.Simulated_opt_richness .>= 1.0),:] # drop rows with 0 body mass
-
-
-    df_meta_reduced = dropmissing(df_meta,:mediandeltaAIC)
-
-f_entropy = Figure()
-    ax_ent = Axis(f_entropy[1, 1], xlabel = "Richness", ylabel = "Entropy")
-    hm = scatter!(ax_ent,df_meta.Simulated_opt_richness,df_meta.Simulated_opt_SE, alpha=0.4)
-    hm = scatter!(ax_ent,df_meta.Simulated_rand_richness,df_meta.Simulated_rand_SE, alpha=0.4)
-    hm2 = scatter!(ax_ent,df_meta.DietRichness_rare,df_meta.ShannEnt_rare, alpha=0.4)
-    max_richness = round(maximum(df_meta.DietRichness_rare),digits = 0)
-    SE_max, SE_min, x_rich_max, x_rich_min = min_max_entropy(max_richness,200)
-    hm4 = lines!(ax_ent,x_rich_max,SE_max)
-    hm5 = lines!(ax_ent,x_rich_min,SE_min)
-
-    ax_obs_exp = Axis(f_entropy[1, 2], xlabel = "Predicted entropy", ylabel = "Observed entropy")
-    hm3 = scatter!(ax_obs_exp,df_meta_reduced.Simulated_opt_SE,df_meta_reduced.ShannEnt_rare)
-    hm6 = lines!(ax_obs_exp,[0, 2],[0, 2])
-
-        hm3 = scatter!(ax_obs_exp,df_meta_reduced.Simulated_opt_richness,df_meta_reduced.DietRichness_rare)
-
-
-
-    of1 = lm(@formula(ShannEnt_rare ~ Simulated_rand_SE), df_meta_reduced)
-    r2(of1)
-    of1 = lm(@formula(ShannEnt_rare ~ Simulated_opt_SE), df_meta_reduced)
-    r2(of1)
-
-
-lm2 = lm(@formula(smallest_prey_mass ~ PreyPerPellet + numb_prey), df_meta)
-lm2 = lm(@formula(largest_prey_mass ~ PreyPerPellet), df_meta)
-lm2 = lm(@formula(ShannEnt_rare ~ PreyPerPellet + DietRichness_rare), df_meta)
-
-
-lm2 = lm(@formula(mass_slopes ~ ShannEnt_rare), df_meta)
-lm2 = lm(@formula(dens_slopes ~ ShannEnt_rare), df_meta)
-lm2 = lm(@formula(abs(mass_slopes) ~ ShannEnt_rare), df_meta)
-
-lm2 = lm(@formula(mass_slopes ~ ShannEnt_rare + PreyPerPellet), df_meta)
-lm2 = lm(@formula(ShannEnt_rare ~ PreyPerPellet + DietRichness_rare), df_meta)
-
-
-lm2 = lm(@formula(dens_slopes ~ ShannEnt_rare * mass_of_most_common_dropones), df_meta)
-lm2 = lm(@formula(dens_slopes ~ DietRichness_rare * ShannEnt_rare), df_meta)
-mainr2 = r2(lm2)
-
-logit = glm(@formula(IsTopPreyBiggest ~ mass_of_most_common_dropones), df_meta, Binomial(), ProbitLink())
-lm2 = lm(@formula(mass_slopes ~ mass_of_most_common_dropones + ShannEnt_rare), df_meta)
-lm2 = lm(@formula(ShannEnt_rare ~ mass_of_most_common_dropones), df_meta)
-mainr2 = r2(lm2)
-
-
-
-f_mass = Figure()
-    ax_mass = Axis(f_mass[1, 1], xlabel = "Mass of largest prey", ylabel = "Largest prey is most common")
-    hm = scatter!(ax_mass,df_meta.mass_of_most_common,df_meta.IsTopPreyBiggest)
-    ax_mass2 = Axis(f_mass[1, 2], xlabel = "Mass of largest prey", ylabel = "Mass slope")
-    hm = scatter!(ax_mass2,df_meta.mass_of_most_common,df_meta.mass_slopes)
-
-
-f_ranks
-
-
-#=
-# how many positive slopes?
-sum(dens_slopes .> 0.0)
-sum(dens_slopes .< 0.0)
-sum(dens_slopes .== 0.0)
-
-# does the slope depend on the sample size?
-CorrelationTest(mass_slopes,numb_prey)
-# does the slope depend on the diversity?
-CorrelationTest(mass_slopes,numb_prey_spp)
-
-# does the slope depend on the sample size?
-CorrelationTest(dens_slopes,numb_prey)
-# does the slope depend on the diversity?
-CorrelationTest(dens_slopes,numb_prey_spp)
-=#
-
-# run a lm to determine if owls trade off foraging randomly versus foraging optimally
-lm(@formula(dens_slopes ~ numb_prey), df_tests)
-
-f_corr = Figure()
-ax_corrs = Axis(f_corr[1, 1], xlabel = "Slope of body mass line", ylabel = "Slope of density line")
-hm = scatter!(ax_corrs,df_tests.mass_slopes,df_tests.dens_slopes, color = convert(Array{Float64,1},df_tests.pval_dens), colormap = :lighttest)
-Colorbar(f_corr[1, 2], hm, label = "Prey diversity in diet")
-
-ax_corrs2 = Axis(f_corr[1, 2], xlabel = "Prey diversity in diet", ylabel = "Slope of density line")
-    #xlims!(ax_corrs2,0,5e3)
-hm = scatter!(ax_corrs2,df_tests.numb_prey_spp, df_tests.dens_slopes,color = convert(Array{Float64,1},df_tests.pval_dens), colormap = :lighttest)
-Colorbar(f_corr[1, 3], hm, label = "p value")
-    scatter!(ax_corrs2,df_tests.numb_prey_spp[df_tests.IsTopPreyBiggest .== 1], df_tests.dens_slopes[df_tests.IsTopPreyBiggest .== 1], color = :black)
-    scatter!(ax_corrs2,df_tests.numb_prey_spp[df_tests.IsTopPreyMostDense .== 1], df_tests.dens_slopes[df_tests.IsTopPreyMostDense .== 1], color = :gray)
-
-
-f_corr
-save("Count_corrs_linearmodel.png",f_corr)
-
-
-#colormap = :lighttest
