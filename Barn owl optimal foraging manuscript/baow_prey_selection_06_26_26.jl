@@ -62,10 +62,11 @@ mainr2 = r2(density_model_2)
 ###### step 2, read in the barn owl diets
 # =============================================================================
 
-df_baow = CSV.read("BarnOwlDiets.csv",DataFrame) # read in diet data
-df_meta = CSV.read("BarnOwlMeta.csv",DataFrame) # read in diet data
-    deleteat!(df_meta, 529) # there's one dataset (#2255) that was done without individuals
+df_baow = CSV.read("BarnOwlDiets_20.csv",DataFrame) # read in diet data
     deleteat!(df_baow, df_baow.DataSet .== 2255) # there's one dataset (#2255) that was done without individuals
+
+df_meta = CSV.read("BarnOwlMeta_20.csv",DataFrame) # read in diet data
+    deleteat!(df_meta, df_meta.DataSet .== 2255) # there's one dataset (#2255) that was done without individuals
 
 minimum(df_meta.Num_obs)
 maximum(df_meta.Num_obs)
@@ -103,7 +104,7 @@ maximum(df_meta.Num_obs)
 
 # summarize by mammal order
     sums_by_order = combine(groupby(df_baow, :PreyOrder), :CountInt => sum => :TotalSum)
-    prop_rodent = sums_by_order.TotalSum[2] / sum(sums_by_order.TotalSum[:])
+    prop_rodent = sums_by_order.TotalSum[1] / sum(sums_by_order.TotalSum[:])
     which_orders = sums_by_order.PreyOrder
 
 # drop rows with 0 body mass ======= NEED TO COME BACK AND FIND THESE MASSES
@@ -335,16 +336,25 @@ df_meta[!, :pval_dens] = pval_dens
 df_meta[!, :numb_prey] = numb_prey
 df_meta[!, :numb_prey_spp] = numb_prey_spp
 df_meta[!, :baow_a] = baow_a_store
-df_meta[!, :mass_range] = mass_range
 df_meta[!, :obs_largest_prey_freq] = observed_largest_prey_freq
 df_meta[!, :NE_intake] = NE_rate
 df_meta[!, :sum_R] = sum_R
 df_meta[!, :FreqBirds] = FreqBirds
 df_meta[!, :NumPos] = NumPositiveInStudy
 
+# drop every row below the 20 prey cut-off
+df_meta2 = df_meta[findall(df_meta.Num_obs .> 50),:] # drop rows with 0 body mass
+
+# drop every row where the prey count was 0 (occur when there are few mammals in the diet)
+df_meta2 = df_meta2[findall(df_meta2.numb_prey .> 0),:] # drop rows with 0 body mass
+
 # ====================================================================
 # save the data set as a csv
-CSV.write("BarnOwlProcessed.csv", df_meta)
+CSV.write("BarnOwlProcessed_50.csv", df_meta2)
+
+# reload it if you are just doing StatsBase
+df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
+
 # ====================================================================
 
 # ===============================================================
@@ -387,20 +397,19 @@ f_miss_dist = Figure()
 # ====================================================================
 
 # ===================================================================
-# coming back to the rank difference against prey body mass figure
+# coming back to the rank difference against prey body mass figure # not using this figure
 # ===================================================================
 # plot a horizontal line at 0
 lines!(ax_mass_rank,2:4e3,0:0,color = :black, linewidth=2)
     save("Body_size_relative_freqs.png",f_mass_rank)
 # ===================================================
 
-
 # ===============================================================
 # coming back to the density and mass rank correlations figure
 # ===============================================================
 f_ranks
     # some regressions don't have enough points to work
-    df_tests = dropmissing(df_meta,:dens_slopes)
+    df_tests = dropmissing(df_meta2,:dens_slopes)
 
     length(df_tests.dens_slopes[findall(df_tests.dens_slopes .> 0.0)]) / size(df_tests,1)
 
@@ -416,13 +425,12 @@ f_ranks
 # see if species diversity influences diet diversity
 # ===================================================
 
-df_meta[!, :l_re] = log10.(df_meta.RERichness) # add logged variable to dataframe
-df_meta[!, :l_ns] = log10.(df_meta.numb_prey_spp) # add logged variable to dataframe
+df_meta2[!, :l_re] = log10.(df_meta2.RERichness) # add logged variable to dataframe
+df_meta2[!, :l_ns] = log10.(df_meta2.numb_prey_spp) # add logged variable to dataframe
 
 # there are some zeros, so drop these out
-df_meta_subset = df_meta[findall(df_meta.l_ns .!= 0),:] # drop rows with 0 body mass
-df_meta_subset = df_meta_subset[findall(df_meta_subset.l_re .!= 0),:] # drop rows with 0 body mass
-df_meta_subset = df_meta_subset[findall(df_meta_subset.sum_R .!= 0),:] # drop rows with 0 body mass
+df_meta_subset = df_meta2
+#df_meta_subset = df_meta2[findall(df_meta2.sum_R .!= 0),:] # drop rows with no observed sumR
 
 model_richness = lm(@formula(l_ns ~ l_re), df_meta_subset)
 model_richness = lm(@formula(l_ns ~ log(LocalRichness)), df_meta_subset)
@@ -430,8 +438,9 @@ r2(model_richness)
 
 #model_richness = fit(MixedModel, @formula(l_ns ~ l_re + (1|ecozone)), df_meta_subset)
 
+# plot local diversity against diet diversity with a linear regression
 diversity_test = Figure()
-    ax_div = Axis(diversity_test[1, 1], xlabel = "Richness of rodents and true insectivores", ylabel = "Species richness is diet")
+    ax_div = Axis(diversity_test[1, 1], xlabel = "Richness of rodents and true insectivores", ylabel = "Species richness in diet")
     a1 = scatter!(ax_div, df_meta_subset.l_re, df_meta_subset.l_ns, color = colorgrad[8], alpha=0.4)
    
     new_x = DataFrame(l_re = range(minimum(df_meta_subset.l_re), maximum(df_meta_subset.l_re), length=10))
@@ -450,25 +459,61 @@ diversity_test = Figure()
 # try to explain variation in density slopes
 # ===================================================
 
-model_ecozone = lm(@formula(dens_slopes ~ ecozone), df_meta)
+# first just checking if different major areas around the world differ
+model_ecozone = lm(@formula(dens_slopes ~ ecozone), df_meta_subset)
 # some diffs by ecozone, so we'll use ecozone as a random effect
 
-model_num_spp = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + (1|ecozone)), df_meta)
-model_sumR = fit(MixedModel, @formula(dens_slopes ~ sum_R + (1|ecozone)), df_meta)
-model_RERichness = fit(MixedModel, @formula(dens_slopes ~ RERichness + (1|ecozone)), df_meta)
-model_FreqBirds = fit(MixedModel, @formula(dens_slopes ~ FreqBirds + (1|ecozone)), df_meta)
-model_RaptorRichness = fit(MixedModel, @formula(dens_slopes ~ RaptorRichness + (1|ecozone)), df_meta)
+# considered also using sum_R, but this is highly correlated with numb_prey_spp
+# obviously because sum_R sums over the prey species, so don't use it
+corrcheck1 = lm(@formula(sum_R ~ numb_prey_spp), df_meta_subset)
 
-model_1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + RERichness + RaptorRichness + FreqBirds + (1|ecozone)), df_meta_subset)
-model_1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + RERichness + RaptorRichness + (1|ecozone)), df_meta)
+# individual predictor models
+model_num_spp = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + (1|ecozone)), df_meta_subset)
+model_RERichness = fit(MixedModel, @formula(dens_slopes ~ RERichness + (1|ecozone)), df_meta_subset)
+model_FreqBirds = fit(MixedModel, @formula(dens_slopes ~ FreqBirds + (1|ecozone)), df_meta_subset)
+model_RaptorRichness = fit(MixedModel, @formula(dens_slopes ~ RaptorRichness + (1|ecozone)), df_meta_subset)
 
-model_1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + RERichness + RaptorRichness + FreqBirds + (1|ecozone)), df_meta_subset)
+# include all terms, backwards select
+model_1 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + FreqBirds + (1|ecozone)), df_meta_subset)
+model_2 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + (1|ecozone)), df_meta_subset)
 
-model_1 = fit(MixedModel, @formula(sum_R ~ numb_prey_spp + (1|ecozone)), df_meta_subset)
-model_1 = fit(MixedModel, @formula(sum_R ~ numb_prey_spp + (1|ecozone)), df_meta)
+# check for significant interactions - nothing to see here
+model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp * RERichness * RaptorRichness + (1|ecozone)), df_meta_subset)
+model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
+    numb_prey_spp*RERichness + numb_prey_spp*RaptorRichness + RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
+model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
+    numb_prey_spp*RaptorRichness + RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
+model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
+    RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
+model_3 = fit(MixedModel, @formula(dens_slopes ~ RERichness + RaptorRichness + 
+    RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
+
+# the same analysis without the random effect of ecozone
+model_num_spp = lm(@formula(dens_slopes ~ numb_prey_spp), df_meta_subset)
+model_sumR = lm(@formula(dens_slopes ~ sum_R), df_meta_subset)
+model_RERichness = lm(@formula(dens_slopes ~ RERichness), df_meta_subset)
+model_FreqBirds = lm(@formula(dens_slopes ~ FreqBirds), df_meta_subset)
+model_RaptorRichness = lm(@formula(dens_slopes ~ RaptorRichness), df_meta_subset)
+
+# with yet another subset, try to predict intake rate
+intake_model1 = lm(@formula(NE_intake ~ numb_prey_spp + RERichness + RaptorRichness + FreqBirds), df_meta_subset)
+intake_model1 = lm(@formula(NE_intake ~ RERichness + RaptorRichness + FreqBirds), df_meta_subset)
+intake_model1 = lm(@formula(NE_intake ~ RERichness + FreqBirds), df_meta_subset)
+intake_model1 = lm(@formula(NE_intake ~ FreqBirds), df_meta_subset)
+
+
+
+
+density_model1 = lm(@formula(dens_slopes ~ NE_intake + numb_prey_spp + RERichness + RaptorRichness + FreqBirds), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ NE_intake + numb_prey_spp + RERichness + RaptorRichness), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ sum_R + NE_intake + numb_prey_spp + RERichness), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ sum_R + NE_intake + numb_prey_spp), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ sum_R + numb_prey_spp), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ sum_R * numb_prey_spp), df_meta_subset)
 
 # test NE intake separately because this reduces the sample size to 330
-model_NE_intake = fit(MixedModel, @formula(dens_slopes ~ NE_intake + (1|ecozone)), df_meta)
+model_NE_intake = fit(MixedModel, @formula(dens_slopes ~ NE_intake + (1|ecozone)), df_meta_subset)
+density_model1 = lm(@formula(dens_slopes ~ NE_intake), df_meta_subset)
 
 
 
@@ -479,27 +524,10 @@ density_model1 = lm(@formula(sum_R ~ NE_intake), df_meta)
 density_model1 = lm(@formula(sum_R ~ RERichness), df_meta)
 density_model1 = lm(@formula(NE_intake ~ RERichness), df_meta)
 
-model_1 = fit(MixedModel, @formula(dens_slopes ~ FreqBirds + RaptorRichness + sum_R + numb_prey_spp + (1|ecozone)), df_meta)
 
 
 
 density_model1 = lm(@formula(dens_slopes ~ NE_intake), df_meta)
-
-
-
-density_model1 = lm(@formula(dens_slopes ~ sum_R), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ LocalRichness), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ RERichness), df_meta)
-
-density_model1 = lm(@formula(dens_slopes ~ sum_R + NE_intake + numb_prey_spp), df_meta)
-density_model1 = lm(@formula(dens_slopes ~ sum_R * numb_prey_spp), df_meta)
-r2(density_model1)
-
-
-
-fit(MixedModel, @formula(dens_slopes ~ 1 + (1|Continent)), df_meta)
-lmm1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + RERichness + (1|ecozone)), df_meta)
-lmm1 = fit(MixedModel, @formula(dens_slopes ~ sum_R + numb_prey_spp + (1|ecozone)), df_meta)
 
 
 r2(lmm1)
