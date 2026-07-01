@@ -13,7 +13,7 @@ using CategoricalArrays
 
 pwd() # check and confirm you are in the directory
 #dir = "C:/Users/jdelong2/OneDrive - University of Nebraska/Projects in progress/Barn_owl_global_diet/"
-dir = "C:/Users/johnp/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript"
+dir = "C:/Users/93652672/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript"
 cd(dir)
 
 # to create the environment, in the pkg repl (]), type generate BarnOwlGlobalDiet
@@ -129,11 +129,19 @@ maximum(df_meta.Num_obs)
 # will come back to this after the loop
 # =============================================================================
 f_ranks = Figure()
-    ax_dens = Axis(f_ranks[1, 1], xlabel = "Rank of density", ylabel = "Rank in diet")
+    ax_dens = Axis(f_ranks[1, 1])
+    
+    , xlabel = "Rank of density", ylabel = "Rank in diet")
                 #xlims!(ax_dens,0,25) ylims!(ax_dens,0,25)
     ax_hist_dens = Axis(f_ranks[1, 2], xlabel = "Slope of line", ylabel = "Frequency")
 # =============================================================================
 
+f = Figure()
+
+ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
+    title = "Title")
+
+    
 # ===================================================
 # plot average net energy gain against the prey types
 # will come back to this after the loop
