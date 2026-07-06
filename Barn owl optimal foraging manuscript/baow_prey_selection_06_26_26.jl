@@ -140,7 +140,7 @@ f_ranks = Figure()
 # ===================================================
 # this shows whether prey should be included in the diets
 f_net_energy = Figure()
-    ax_net = Axis(f_net_energy[1, 1], xlabel = "Average daily mass intake rate", ylabel = "Mass/h for prey types")#, yscale = log10)
+    ax_net = Axis(f_net_energy[1, 1], xlabel = "Average daily mass intake rate", ylabel = "Expected energy gain for prey types")#, yscale = log10)
 # ===================================================
 
 # ===================================================
@@ -343,7 +343,7 @@ df_meta[!, :FreqBirds] = FreqBirds
 df_meta[!, :NumPos] = NumPositiveInStudy
 
 # drop every row below the 20 prey cut-off
-df_meta2 = df_meta[findall(df_meta.Num_obs .> 50),:] # drop rows with 0 body mass
+df_meta2 = df_meta[findall(df_meta.Num_obs .> 20),:] # drop rows with 0 body mass
 
 # drop every row where the prey count was 0 (occur when there are few mammals in the diet)
 df_meta2 = df_meta2[findall(df_meta2.numb_prey .> 0),:] # drop rows with 0 body mass
@@ -417,8 +417,8 @@ f_ranks
     lines!(ax_dens,1:20,1:20,color = :black, linewidth=2)
         text!(ax_dens,(20,18), text = "1:1")
 
-    hist!(ax_hist_dens,df_tests.dens_slopes, color = :white, strokewidth = 1, strokecolor = colorgrad[8])
-        lines!(ax_hist_dens,0:0,0:100,color = :black, linewidth=2)
+    hist!(ax_hist_dens,df_tests.dens_slopes, color = colorgrad[8], strokewidth = 1, strokecolor = :white)
+        lines!(ax_hist_dens,0:0,0:100,color = :black, linewidth=2, linestyle = :dash)
     save("Density_count_correlations.png",f_ranks)
 
 # ===================================================
