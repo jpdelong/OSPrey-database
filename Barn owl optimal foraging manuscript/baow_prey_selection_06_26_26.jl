@@ -355,6 +355,15 @@ CSV.write("BarnOwlProcessed_50.csv", df_meta2)
 # reload it if you are just doing StatsBase
 df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
 
+# save the candidate h and proportion data from the iterative run
+dataout = DataFrame(cand_h = candidate_h,
+    prop_meeting_rule = prop_prey_meeting_rule)
+varied_h_results = CSV.write("Vary_h_results.csv", dataout)
+
+# if you want to read back in the varied h results
+varied_h_results = CSV.read("Vary_h_results.csv",DataFrame) # read in density data
+
+
 # ====================================================================
 
 # ===============================================================
@@ -366,7 +375,8 @@ h_lower_bound = 1/mean(skipmissing(df_meta.PreyPerPellet))/3
 # coming back to the net energy gain figure - main OFT figure
 # ===============================================================
 f_net_energy
-prop_prey_meeting_rule = num_NE_diffs_over_zero / num_NE_diffs_tested
+    text!(ax_net,(770,11.8), text = "A")
+    prop_prey_meeting_rule = num_NE_diffs_over_zero / num_NE_diffs_tested
 save("Net_energy_return_of_prey_log.png",f_net_energy)
 # ===================================================
 
@@ -375,15 +385,14 @@ save("Net_energy_return_of_prey_log.png",f_net_energy)
 # only works if you have run the whole vector of candidate h's
 # ====================================================================
 
-f_h_by_OF = Figure()
-    ax_h = Axis(f_h_by_OF[1, 1], xlabel = "Handling time (days)", ylabel = "Proportion meeting rule")
+#f_h_by_OF = Figure()
+    ax_h = Axis(f_net_energy[1, 2], xlabel = "Handling time (days)", ylabel = "Proportion meeting rule")
     xlims!(ax_h,[0,0.2])
-    scatter!(ax_h,candidate_h, prop_prey_meeting_rule, color = :black)
-    lines!(ax_h,candidate_h, prop_prey_meeting_rule, color = :black, alpha=0.4)
-    lines!(ax_h,[0.018,0.018],[0,1], color = colorgrad[8], linewidth = 4)
-        text!(ax_h,(0.018+0.001,0.25), text = "Estimated handling time")
-    lines!(ax_h,[h_lower_bound,h_lower_bound],[0,1], color = :green, linewidth = 4)
-        text!(ax_h,(h_lower_bound+0.001,0.75), text = "Lower bound")
+    scatter!(ax_h,varied_h_results.cand_h, varied_h_results.prop_meeting_rule, color = :black)
+    lines!(ax_h,varied_h_results.cand_h, varied_h_results.prop_meeting_rule, color = :black, alpha=0.4)
+    lines!(ax_h,[0.02,0.02],[0,1], color = colorgrad[8], linewidth = 4)
+        text!(ax_h,(0.02+0.001,0.25), text = "Estimated handling time")
+        text!(ax_h,(0.18,0.92), text = "B")
     save("VariationInH.png",f_h_by_OF)
 
 # ====================================================================
