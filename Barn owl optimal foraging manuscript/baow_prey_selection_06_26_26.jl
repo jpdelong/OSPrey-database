@@ -12,8 +12,8 @@ using ColorSchemes
 using CategoricalArrays
 
 pwd() # check and confirm you are in the directory
-#dir = "C:/Users/jdelong2/OneDrive - University of Nebraska/Projects in progress/Barn_owl_global_diet/"
-dir = "C:/Users/93652672/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript"
+dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript/"
+
 cd(dir)
 
 # to create the environment, in the pkg repl (]), type generate BarnOwlGlobalDiet
@@ -140,7 +140,7 @@ f_ranks = Figure()
 # ===================================================
 # this shows whether prey should be included in the diets
 f_net_energy = Figure()
-    ax_net = Axis(f_net_energy[1, 1], xlabel = "Average daily mass intake rate", ylabel = "Expected energy gain for prey types")#, yscale = log10)
+    ax_net = Axis(f_net_energy[1, 1], xlabel = "Average daily mass intake rate (g/day)", ylabel = "ln Expected energy gain for prey types (g/day)")
 # ===================================================
 
 # ===================================================
@@ -263,7 +263,10 @@ for gg = 1:length(candidate_h) # in this loop, run through different guess for h
                 lsline_count = lm(@formula(CountRank ~ DensRank), df_ranked) # regression
                 new_x_for_lsline = DataFrame(DensRank = 1:1:maximum(df_ranked.DensRank)) # make new x
                 df_predict_y = predict(lsline_count,new_x_for_lsline) # make new y
-                lines!(ax_dens,new_x_for_lsline.DensRank,df_predict_y) # plot line
+
+                if baow_h == 0.02 # only plot this for the main estimate of h
+                    lines!(ax_dens,new_x_for_lsline.DensRank,df_predict_y) # plot line
+                end
 
                 # find the difference in observed versus expected ranks
                 rank_diffs = df_ranked.Frequencies .- df_ranked.Rel_density            
@@ -307,8 +310,10 @@ for gg = 1:length(candidate_h) # in this loop, run through different guess for h
                             num_NE_diffs_over_zero = num_NE_diffs_over_zero + 1 # tally up the contrasts in favor of OFT
                         end
 
-                        scatter!(ax_net,NE_rate_discounted, log.(NE_prey), color = colorgrad[8], alpha=0.4)
-                        scatter!(ax_net,NE_rate_discounted, log.(NE_rate_discounted), marker = :diamond, color = :black)
+                        if baow_h == 0.02 # only plot this for the main estimate of h
+                            scatter!(ax_net,NE_rate_discounted, log.(NE_prey), color = colorgrad[8], alpha=0.4)
+                            scatter!(ax_net,NE_rate_discounted, log.(NE_rate_discounted), marker = :diamond, color = :black)
+                        end
                         
                         DietTests[zz] = NE_prey - NE_rate_discounted
                                    
@@ -363,7 +368,6 @@ varied_h_results = CSV.write("Vary_h_results.csv", dataout)
 # if you want to read back in the varied h results
 varied_h_results = CSV.read("Vary_h_results.csv",DataFrame) # read in density data
 
-
 # ====================================================================
 
 # ===============================================================
@@ -378,6 +382,9 @@ f_net_energy
     text!(ax_net,(770,11.8), text = "A")
     prop_prey_meeting_rule = num_NE_diffs_over_zero / num_NE_diffs_tested
 save("Net_energy_return_of_prey_log.png",f_net_energy)
+using CairoMakie
+save("Net_energy_return_of_prey_log.pdf",f_net_energy)
+
 # ===================================================
 
 # ====================================================================
@@ -392,7 +399,7 @@ save("Net_energy_return_of_prey_log.png",f_net_energy)
     lines!(ax_h,varied_h_results.cand_h, varied_h_results.prop_meeting_rule, color = :black, alpha=0.4)
     lines!(ax_h,[0.02,0.02],[0,1], color = colorgrad[8], linewidth = 4)
         text!(ax_h,(0.02+0.001,0.25), text = "Estimated handling time")
-        text!(ax_h,(0.18,0.92), text = "B")
+        text!(ax_h,(0.185,0.98), text = "B")
     save("VariationInH.png",f_h_by_OF)
 
 # ====================================================================
@@ -416,6 +423,7 @@ lines!(ax_mass_rank,2:4e3,0:0,color = :black, linewidth=2)
 # ===============================================================
 # coming back to the density and mass rank correlations figure
 # ===============================================================
+
 f_ranks
     # some regressions don't have enough points to work
     df_tests = dropmissing(df_meta2,:dens_slopes)
@@ -424,11 +432,17 @@ f_ranks
 
     # draw a 1:1 line overtop
     lines!(ax_dens,1:20,1:20,color = :black, linewidth=2)
-        text!(ax_dens,(20,18), text = "1:1")
+        text!(ax_dens,(20,19), text = "1:1")
 
     hist!(ax_hist_dens,df_tests.dens_slopes, color = colorgrad[8], strokewidth = 1, strokecolor = :white)
         lines!(ax_hist_dens,0:0,0:100,color = :black, linewidth=2, linestyle = :dash)
-    save("Density_count_correlations.png",f_ranks)
+        text!(ax_hist_dens,(-1,100), text = "B")
+        
+        text!(ax_dens,(2,19.5), text = "A")
+
+        #using CairoMakie
+
+        save("Density_count_correlations.pdf",f_ranks)
 
 # ===================================================
 # see if species diversity influences diet diversity
@@ -442,14 +456,11 @@ df_meta_subset = df_meta2
 #df_meta_subset = df_meta2[findall(df_meta2.sum_R .!= 0),:] # drop rows with no observed sumR
 
 model_richness = lm(@formula(l_ns ~ l_re), df_meta_subset)
-model_richness = lm(@formula(l_ns ~ log(LocalRichness)), df_meta_subset)
 r2(model_richness)
-
-#model_richness = fit(MixedModel, @formula(l_ns ~ l_re + (1|ecozone)), df_meta_subset)
 
 # plot local diversity against diet diversity with a linear regression
 diversity_test = Figure()
-    ax_div = Axis(diversity_test[1, 1], xlabel = "Richness of rodents and true insectivores", ylabel = "Species richness in diet")
+    ax_div = Axis(diversity_test[1, 1], xlabel = "log10 Richness of rodents and true insectivores", ylabel = "log10 Species richness in diet")
     a1 = scatter!(ax_div, df_meta_subset.l_re, df_meta_subset.l_ns, color = colorgrad[8], alpha=0.4)
    
     new_x = DataFrame(l_re = range(minimum(df_meta_subset.l_re), maximum(df_meta_subset.l_re), length=10))
@@ -462,8 +473,8 @@ diversity_test = Figure()
     band!(ax_div,new_x.l_re,df_predict_y.lower,df_predict_y.upper, color = (:gray, 0.2))
     rod = lines!(ax_div,new_x.l_re, df_predict_y.prediction, linewidth = 2, color = :black)
 
-    save("Prey_richness.png",diversity_test)
-
+    save("Prey_richness.pdf",diversity_test)
+using CairoMakie
 # ===================================================
 # try to explain variation in density slopes
 # ===================================================
