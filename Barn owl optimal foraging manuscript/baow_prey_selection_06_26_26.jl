@@ -10,6 +10,7 @@ using StatsBase
 using FreqTables
 using ColorSchemes
 using CategoricalArrays
+using LinearAlgebra
 
 pwd() # check and confirm you are in the directory
 dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript/"
@@ -188,8 +189,8 @@ num_NE_diffs_tested = 0
 # initiate an empty vector to store differences
 OptForTests = zeros(Float64, 1)
 
-candidate_h = [0.01, 0.02, 0.04, 0.08, 0.16]
-candidate_h = [0.02]
+candidate_h = [0.01, 0.02, 0.04, 0.08, 0.16] # choose this if you want to vary the handling time
+candidate_h = [0.02] # choose this if you want to run the main analysis
 
 prop_prey_meeting_rule = zeros(Float64, length(candidate_h))
 
@@ -355,7 +356,7 @@ df_meta2 = df_meta2[findall(df_meta2.numb_prey .> 0),:] # drop rows with 0 body 
 
 # ====================================================================
 # save the data set as a csv
-CSV.write("BarnOwlProcessed_50.csv", df_meta2)
+CSV.write("BarnOwlProcessed_20.csv", df_meta2)
 
 # reload it if you are just doing StatsBase
 df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
@@ -367,7 +368,6 @@ varied_h_results = CSV.write("Vary_h_results.csv", dataout)
 
 # if you want to read back in the varied h results
 varied_h_results = CSV.read("Vary_h_results.csv",DataFrame) # read in density data
-
 # ====================================================================
 
 # ===============================================================
@@ -453,28 +453,35 @@ df_meta2[!, :l_ns] = log10.(df_meta2.numb_prey_spp) # add logged variable to dat
 
 # there are some zeros, so drop these out
 df_meta_subset = df_meta2
-#df_meta_subset = df_meta2[findall(df_meta2.sum_R .!= 0),:] # drop rows with no observed sumR
 
-model_richness = lm(@formula(l_ns ~ l_re), df_meta_subset)
-r2(model_richness)
+# run the model
+model_richness = fit(MixedModel, @formula(l_ns ~ l_re + (1|ecozone)), df_meta_subset)
+
+# get predictions
+xgrid = range(minimum(df_meta_subset.l_re), maximum(df_meta_subset.l_re), length=10) # new range of x's
+new_df = DataFrame(l_ns = 0.0,l_re = xgrid,ecozone = first(df_meta_subset.ecozone)) # construct dataframe of predictors
+
+# do the prediction
+yhat = predict(model_richness, new_df; new_re_levels=:population)
+
+# have to manually get the confidence band on the regression
+V = vcov(model_richness)
+X = modelmatrix(model_richness.formula, new_df)
+se = sqrt.(sum((X[1] * V) .* X[1], dims=2))
+
+lower = yhat .- 1.96 .* se
+upper = yhat .+ 1.96 .* se
 
 # plot local diversity against diet diversity with a linear regression
 diversity_test = Figure()
     ax_div = Axis(diversity_test[1, 1], xlabel = "log10 Richness of rodents and true insectivores", ylabel = "log10 Species richness in diet")
     a1 = scatter!(ax_div, df_meta_subset.l_re, df_meta_subset.l_ns, color = colorgrad[8], alpha=0.4)
-   
-    new_x = DataFrame(l_re = range(minimum(df_meta_subset.l_re), maximum(df_meta_subset.l_re), length=10))
-    df_predict_y = predict(model_richness, new_x, interval=:confidence, level = 0.95)
-    # for some reason the predictions data type is coming out weird, so change it
-    df_predict_y[!,:prediction] = convert.(Float64,df_predict_y[!,:prediction])
-    df_predict_y[!,:lower] = convert.(Float64,df_predict_y[!,:lower])
-    df_predict_y[!,:upper] = convert.(Float64,df_predict_y[!,:upper])
 
-    band!(ax_div,new_x.l_re,df_predict_y.lower,df_predict_y.upper, color = (:gray, 0.2))
-    rod = lines!(ax_div,new_x.l_re, df_predict_y.prediction, linewidth = 2, color = :black)
+    band!(ax_div,new_x.l_re,lower[:],upper[:], color = (:gray, 0.2))
+    rod = lines!(ax_div,new_x.l_re, yhat, linewidth = 2, color = :black)
 
-    save("Prey_richness.pdf",diversity_test)
-using CairoMakie
+    save("Prey_richness.png",diversity_test)
+
 # ===================================================
 # try to explain variation in density slopes
 # ===================================================
@@ -483,73 +490,17 @@ using CairoMakie
 model_ecozone = lm(@formula(dens_slopes ~ ecozone), df_meta_subset)
 # some diffs by ecozone, so we'll use ecozone as a random effect
 
-# considered also using sum_R, but this is highly correlated with numb_prey_spp
-# obviously because sum_R sums over the prey species, so don't use it
-corrcheck1 = lm(@formula(sum_R ~ numb_prey_spp), df_meta_subset)
-
-# individual predictor models
-model_num_spp = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + (1|ecozone)), df_meta_subset)
-model_RERichness = fit(MixedModel, @formula(dens_slopes ~ RERichness + (1|ecozone)), df_meta_subset)
-model_FreqBirds = fit(MixedModel, @formula(dens_slopes ~ FreqBirds + (1|ecozone)), df_meta_subset)
-model_RaptorRichness = fit(MixedModel, @formula(dens_slopes ~ RaptorRichness + (1|ecozone)), df_meta_subset)
-
-# include all terms, backwards select
+# start with all terms, backwards select
 model_1 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + FreqBirds + (1|ecozone)), df_meta_subset)
+# just confirm that freq birds doesn't have an effect on its own
+model_FreqBirds = fit(MixedModel, @formula(dens_slopes ~ FreqBirds + (1|ecozone)), df_meta_subset)
+
+# do the model without freq_birds
 model_2 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + (1|ecozone)), df_meta_subset)
+# all terms significant
 
 # check for significant interactions - nothing to see here
 model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp * RERichness * RaptorRichness + (1|ecozone)), df_meta_subset)
-model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
-    numb_prey_spp*RERichness + numb_prey_spp*RaptorRichness + RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
-model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
-    numb_prey_spp*RaptorRichness + RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
-model_3 = fit(MixedModel, @formula(dens_slopes ~ numb_prey_spp + RERichness + RaptorRichness + 
-    RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
-model_3 = fit(MixedModel, @formula(dens_slopes ~ RERichness + RaptorRichness + 
-    RERichness*RaptorRichness + (1|ecozone)), df_meta_subset)
-
-# the same analysis without the random effect of ecozone
-model_num_spp = lm(@formula(dens_slopes ~ numb_prey_spp), df_meta_subset)
-model_sumR = lm(@formula(dens_slopes ~ sum_R), df_meta_subset)
-model_RERichness = lm(@formula(dens_slopes ~ RERichness), df_meta_subset)
-model_FreqBirds = lm(@formula(dens_slopes ~ FreqBirds), df_meta_subset)
-model_RaptorRichness = lm(@formula(dens_slopes ~ RaptorRichness), df_meta_subset)
-
-# with yet another subset, try to predict intake rate
-intake_model1 = lm(@formula(NE_intake ~ numb_prey_spp + RERichness + RaptorRichness + FreqBirds), df_meta_subset)
-intake_model1 = lm(@formula(NE_intake ~ RERichness + RaptorRichness + FreqBirds), df_meta_subset)
-intake_model1 = lm(@formula(NE_intake ~ RERichness + FreqBirds), df_meta_subset)
-intake_model1 = lm(@formula(NE_intake ~ FreqBirds), df_meta_subset)
-
-
-
-
-density_model1 = lm(@formula(dens_slopes ~ NE_intake + numb_prey_spp + RERichness + RaptorRichness + FreqBirds), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ NE_intake + numb_prey_spp + RERichness + RaptorRichness), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ sum_R + NE_intake + numb_prey_spp + RERichness), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ sum_R + NE_intake + numb_prey_spp), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ sum_R + numb_prey_spp), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ sum_R * numb_prey_spp), df_meta_subset)
 
 # test NE intake separately because this reduces the sample size to 330
 model_NE_intake = fit(MixedModel, @formula(dens_slopes ~ NE_intake + (1|ecozone)), df_meta_subset)
-density_model1 = lm(@formula(dens_slopes ~ NE_intake), df_meta_subset)
-
-
-
-
-
-# check for some correlations among predictors
-density_model1 = lm(@formula(sum_R ~ NE_intake), df_meta)
-density_model1 = lm(@formula(sum_R ~ RERichness), df_meta)
-density_model1 = lm(@formula(NE_intake ~ RERichness), df_meta)
-
-
-
-
-density_model1 = lm(@formula(dens_slopes ~ NE_intake), df_meta)
-
-
-r2(lmm1)
-
-
