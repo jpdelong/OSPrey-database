@@ -104,6 +104,10 @@ mainr2 = r2(lm_1)
 lm_2 = lm(@formula(LogDensity ~ LogMass * Order), subset_df)
 mainr2 = r2(lm_2)
 
+dof_residual(lm_2)
+dof(lm_2)
+
+
 # plot all the points first, then come back to the lines
 # rodents
     df_subset = subset_df[findall(subset_df.Order .== "Rodentia"),:]
