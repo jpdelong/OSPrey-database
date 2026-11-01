@@ -372,7 +372,7 @@ density_model1 = lm(@formula(baow_a ~ ecozone), df_meta2)
 density_model1 = lm(@formula(baow_a ~ ShannEnt_rare), df_meta2)
 density_model1 = lm(@formula(baow_a ~ obs_largest_prey_freq), df_meta2)
 
-density_model1 = lm(@formula(baow_a ~ numb_prey_spp + RERichness + obs_largest_prey_freq), df_meta2)
+density_model1 = lm(@formula(baow_a ~ numb_prey_spp * RaptorRichness * obs_largest_prey_freq), df_meta2)
 r2(density_model1)
 
 density_model1 = lm(@formula(baow_a ~ ShannEnt_rare + RERichness + obs_largest_prey_freq), df_meta2)
