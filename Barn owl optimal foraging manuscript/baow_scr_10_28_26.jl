@@ -365,6 +365,38 @@ df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
 # ====================================================================
 
 
+
+# ====================================================================
+# make the diet-diversity spectrum figure
+# ====================================================================
+
+
+f_diet_div = Figure()
+    ax_diet_div = Axis(f_diet_div[1, 1], xlabel = "Diet richness", ylabel = "Diet entropy")
+    scatter!(df_meta2.DietRichness_rare, df_meta2.ShannEnt_rare, color = :black, alpha=0.1)
+
+    df_meta2_no_ppp = dropmissing(df_meta2,:PreyPerPellet)
+
+    scatter!(df_meta2_no_ppp.DietRichness_rare, df_meta2_no_ppp.ShannEnt_rare;
+    color = df_meta2_no_ppp.baow_a,
+    colormap = :viridis)
+
+    Colorbar(f_diet_div[1,2], limits=extrema(df_meta2_no_ppp.baow_a), colormap=:viridis)
+
+    # plot the maximum entropy onto the palette
+    ext = round.(extrema(df_meta2_no_ppp.DietRichness_rare), digits = 0)
+    richness_list = collect(ext[1]:ext[2])
+    maxentropy = zeros(Float64,length(richness_list))
+
+    for i = 1:length(richness_list)
+        freqs = fill(20/richness_list[i],i)./20
+        maxentropy[i] = -sum(freqs .* log.(freqs))
+    end
+
+    lines!(ax_diet_div, richness_list, maxentropy, color = :black)
+
+
+
 density_model1 = lm(@formula(baow_a ~ numb_prey_spp), df_meta2)
 density_model1 = lm(@formula(baow_a ~ RERichness), df_meta2)
 density_model1 = lm(@formula(baow_a ~ RaptorRichness), df_meta2)
