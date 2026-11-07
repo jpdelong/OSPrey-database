@@ -367,10 +367,10 @@ df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
 
 
 # ====================================================================
-# make the diet-diversity spectrum figure
+# make the diversity-scr figure
 # ====================================================================
 
-
+# open up a figure, set up diet-diversity panel
 f_diet_div = Figure()
     ax_diet_div = Axis(f_diet_div[1, 1], xlabel = "Diet richness", ylabel = "Diet entropy")
     scatter!(df_meta2.DietRichness_rare, df_meta2.ShannEnt_rare, color = :black, alpha=0.1)
@@ -395,14 +395,29 @@ f_diet_div = Figure()
 
     lines!(ax_diet_div, richness_list, maxentropy, color = :black)
 
+# set up a panel for richness-scr
+    ax_diet_scr = Axis(f_diet_div[1, 3], xlabel = "Diet richness", ylabel = "Space clearance rate")
+    
+    df_meta_scr = df_meta2[findall(df_meta2.baow_a .!= 0),:] # drop rows with 0 body mass
 
+    
+    scatter!(df_meta_scr.DietRichness_rare, df_meta_scr.baow_a, color = :black, alpha=0.3)
 
-density_model1 = lm(@formula(baow_a ~ numb_prey_spp), df_meta2)
-density_model1 = lm(@formula(baow_a ~ RERichness), df_meta2)
-density_model1 = lm(@formula(baow_a ~ RaptorRichness), df_meta2)
-density_model1 = lm(@formula(baow_a ~ ecozone), df_meta2)
-density_model1 = lm(@formula(baow_a ~ ShannEnt_rare), df_meta2)
-density_model1 = lm(@formula(baow_a ~ obs_largest_prey_freq), df_meta2)
+    save("SCR_diversity_relationship.pdf",f_diet_div)
+
+# ====================================================================
+# test for effects on scr
+# ====================================================================
+
+# do single effects
+density_model1 = lm(@formula(baow_a ~ numb_prey_spp), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ RERichness), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ RaptorRichness), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ ecozone), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ ShannEnt_rare), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ obs_largest_prey_freq), df_meta_scr)
+density_model1 = lm(@formula(baow_a ~ FreqBirds), df_meta_scr)
+
 
 density_model1 = lm(@formula(baow_a ~ numb_prey_spp * RaptorRichness * obs_largest_prey_freq), df_meta2)
 r2(density_model1)
@@ -411,21 +426,6 @@ density_model1 = lm(@formula(baow_a ~ ShannEnt_rare + RERichness + obs_largest_p
 r2(density_model1)
 
 density_model1 = lm(@formula(ShannEnt_rare ~ numb_prey_spp), df_meta2)
-
-
-
-density_model1 = lm(@formula(baow_a ~ numb_prey), df_meta2)
-density_model1 = lm(@formula(baow_a ~ FreqBirds), df_meta2)
-
-
-
-density_model1 = lm(@formula(baow_a ~ largest_prey_mass), df_meta2)
-density_model1 = lm(@formula(baow_a ~ smallest_prey_mass), df_meta2)
-
-density_model1 = lm(@formula(baow_a ~ RERichness * numb_prey_spp), df_meta2)
-r2(density_model1)
-
-
 
 # ====================================================================
 # ====================================================================
