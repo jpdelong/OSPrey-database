@@ -10,12 +10,14 @@ using StatsBase
 using FreqTables
 using ColorSchemes
 using CategoricalArrays
-using LinearAlgebra
+using DifferentialEquations
 
 pwd() # check and confirm you are in the directory
-dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Barn owl optimal foraging manuscript/"
+dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Diversity stability relationship in barn owls/"
 
 cd(dir)
+
+include("BAOW_model.jl")
 
 # to create the environment, in the pkg repl (]), type generate BarnOwlGlobalDiet
 # to activate the environment, in the pkg repl (]), type activate BarnOwlGlobalDiet
@@ -52,9 +54,7 @@ df_density = df_density[findall(df_density.BodyMass .!= 0),:] # drop rows with 0
 df_density[!, :LogDensity] = log10.(df_density.Density_km) # log10 tranform the density
 df_density[!, :LogMass] = log10.(df_density.BodyMass) # log10 transform the body mass
 
-# model 1 - straight all species allometry
-lm_1 = lm(@formula(LogDensity ~ LogMass), df_density)
-# model 2 - allometry with orders
+# model 1 - allometry with orders
 density_model_2 = lm(@formula(LogDensity ~ LogMass * Order), df_density)
 #lm_2 = lm(@formula(LogDensity ~ LogMass + Order), df_density)
 mainr2 = r2(density_model_2)
@@ -69,23 +69,17 @@ df_baow = CSV.read("BarnOwlDiets_20.csv",DataFrame) # read in diet data
 df_meta = CSV.read("BarnOwlMeta_20.csv",DataFrame) # read in diet data
     deleteat!(df_meta, df_meta.DataSet .== 2255) # there's one dataset (#2255) that was done without individuals
 
-minimum(df_meta.Num_obs)
-maximum(df_meta.Num_obs)
-
 # grab some descriptive information
     datasets = unique(df_baow.DataSet) # need this for the loop below
     preycats = unique(df_baow.PreyClass)
     howmanystudies = length(unique(df_baow.DataSet))
-    total_prey = sum(skipmissing(df_baow.CountInt))
     datasets_used = sum(df_meta.Num_obs .> 20)
 
 # reduce to only rows with prey identified to species or genus
     df_baow = filter(row -> row.IDLevel == "Species" || row.IDLevel == "Genus", df_baow)
-    howmanyspecies = length(unique(df_baow.PreyScientificName))
 
 # drop everything but mammals
     df_baow = df_baow[occursin.("Mammalia", df_baow.PreyClass), :] # reduce the data set to only mammal prey
-    howmanyspecies = length(unique(df_baow.PreyScientificName))
 
 # summarize by mammal order
     sums_by_order = combine(groupby(df_baow, :PreyOrder), :CountInt => sum => :TotalSum)
@@ -115,14 +109,18 @@ numb_prey_spp = zeros(Float64, howmanystudies)
 baow_a_store = zeros(Float64, howmanystudies)
 NE_rate = Array{Union{Float64,Missing}}(missing, howmanystudies)
 sum_R = zeros(Float64, howmanystudies)
-
+all_solutions = Matrix{Float64}[]
+t_solution = []
 # ==========================================================================================
 ###### step 4, # cycle through the datasets to generate ranks, slopes, and diversity metrics
 # ==========================================================================================
 
-h_owl = 0.02 # choose this if you want to run the main analysis
+baow_h = 0.02 # choose this if you want to run the main analysis
 
-for i = 1:howmanystudies # in this loop, run through all the different diets
+include("BAOW_model.jl")
+
+for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
+    println(i)
     j = df_meta.DataSet[i]
     df_diet = DataFrame()
     new_x = DataFrame()
@@ -164,18 +162,17 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 
         # add the mean predicted density to the data frame
         df_diet[!, :LogDensity] = df_predict_y
-        df_diet[!, :Density] = exp.(df_diet.LogDensity) # convert to non-log
+        df_diet[!, :Density] = 10 .^ (df_diet.LogDensity) # convert to non-log
 
         #####################################################################################
         # calculate frequencies of diet items
         df_diet[!, :Frequencies] = df_diet.CountInt./ sum(df_diet.CountInt)
-        df_diet[!, :Rel_density] = df_diet.Density./ sum(df_diet.Density)
 
-        numb_prey[i] = sum(df_ranked.CountInt)
-        numb_prey_spp[i] = size(df_ranked,1)
+        # tally number of prey species and individuals
+        numb_prey[i] = sum(df_diet.CountInt)
+        numb_prey_spp[i] = size(df_diet,1)
 
-
-        # APPROACH 3 -- calculate the a for the diet
+        # calculate the a for the diet
         mean_ppp = mean(skipmissing(df_meta.PreyPerPellet))
         sum_R[i] = sum(df_diet.Density)
         p3 = df_meta.PreyPerPellet[i]
@@ -184,9 +181,82 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
         else
             baow_a = -p3 / (p3 * sum_R[i] * (baow_h - 1))
             baow_a_store[i] = baow_a
-        end         
+
+            # ------------------------------------------
+            # now set up and call the ODE
+            # ------------------------------------------
+            # data drawn from the dataset
+            # only do datasets that had prey per pellet data
+
+            u0 = zeros(Float64,12)
+            u0[1:size(df_diet,1)] = df_diet.Density
+
+            masses = zeros(Float64,11)
+            masses[1:size(df_diet,1)] = 10 .^ df_diet.LogMass 
+
+            densities = zeros(Float64,11)
+            densities[1:size(df_diet,1)] = df_diet.Density
+            u0[12] = 0.56
+
+            r_max = 0.025 .* masses .^ -0.26 # allometry from Blueweiss 1978 Oecologia
+            r_max[isinf.(r_max)] .= 0
+
+            K = 10 .* densities
+
+            # basic model setup
+            tspan = [0 1000]
+
+            # make owl mortality allometric
+            owl_mass = 600
+            d_owl = 0.9 * 0.0935 .* owl_mass .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
+
+            # other owl-specific parameters
+            GGE = 0.05   
+            h_owl = 0.02
+
+                struct to_pass
+                    d_owl::Float64
+                    GGE::Float64
+                    a_owl::Float64
+                    h_owl::Float64
+                    masses::Vector{Float64}
+                    densities::Vector{Float64}
+                    r_max::Vector{Float64}
+                    K::Vector{Float64}
+                end
+
+            p = to_pass(d_owl, GGE, baow_a, h_owl, masses, densities, r_max, K)
+
+            prob = ODEProblem(BAOW_model, u0, tspan, p)
+            sol_p = solve(prob, Tsit5(); saveat=0.1)
+
+            push!(all_solutions, Array(sol_p))
+
+        end
     end
+
+    t_solution = sol_p.t
 end
+
+
+WhichDataSet = 7
+
+fig = Figure(size = (1000,700))
+    ax1 = Axis(fig[1,1], title = "Prey")
+    ax2 = Axis(fig[1,2],title = "Barn Owls")
+
+for i in 1:11
+    lines!(ax1, t_solution, all_solutions[WhichDataSet][i,:])
+end
+
+lines!(ax2, sol_p.t, sol_p[12,:], label="Owls", color=:black)
+fig
+
+
+axislegend(ax1)
+
+
+
 
 
 # ===================================================
