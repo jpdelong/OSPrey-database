@@ -1,11 +1,12 @@
-function solve_BAOW_ODE(p,u0,tspan,masses)
+function solve_BAOW_ODE(u0,tspan,masses,a_owl)
 
     # make owl mortality allometric
-    m_owl = mo .* masses .^ mu
-    GGE = 0.001
-    
-        
-    p = [m_owl, GGE, a_owl, h_owl]
+    owl_mass = 600
+    d_owl = 0.0935 .* owl_mass .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
+    GGE = 0.001    
+    h_owl = 0.02
+
+    p = [d_owl, GGE, a_owl, h_owl]
 
     function BAOW_model(du, u, p, t, masses)
 
@@ -17,7 +18,7 @@ function solve_BAOW_ODE(p,u0,tspan,masses)
         R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, O = u
 
         # parameters
-        m_owl, GGE, a_owl, h_owl = p 
+        d_owl, GGE, a_owl, h_owl = p 
 
         # sum up all the prey
         R_all = R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10
@@ -40,9 +41,8 @@ function solve_BAOW_ODE(p,u0,tspan,masses)
         du[10] = r_max[10] * R10 * (1 - (R10 + 0.5 * (R_all - R10)) / K[10]) - a_owl * R10 * O / O_denominator
 
         # owl equation
-        e_owl = GGE *sum(masses .* a_owl .* du[1:10])
-        owl_births = e_owl * a_owl * sum(du[1:10]) * O / O_denominator
-        owl_deaths = m_owl * O
+        owl_births = (GGE/owl_mass) * a_owl * R_all * O / O_denominator
+        owl_deaths = d_owl * O
         du[11] = owl_births - owl_deaths
 
         return nothing
