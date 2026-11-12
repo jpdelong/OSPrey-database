@@ -122,6 +122,7 @@ include("BAOW_model.jl")
 for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
     println(i)
     j = df_meta.DataSet[i]
+    rare_richness = df_meta.DietRichness_rare[j]
     df_diet = DataFrame()
     new_x = DataFrame()
     df_diet = df_baow[findall(df_baow.DataSet .== [j]),:]
@@ -149,7 +150,7 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
     end
     ################## end of re-distribution block
 
-    if sum(df_diet.CountInt) > 20
+    if sum(df_diet.CountInt) > 20 && rare_richness < 12
     #if !isempty(df_diet)
         numb_diet = df_diet.CountInt
         mass_diet = df_diet.LogMass
@@ -204,14 +205,15 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
             K = 10 .* densities
 
             # basic model setup
-            tspan = [0 1000]
+            tspan = [0 3650]
 
             # make owl mortality allometric
-            owl_mass = 600
-            d_owl = 0.9 * 0.0935 .* owl_mass .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
+            owl_mass = 550
+            fraction_dry_mass = 0.3
+            d_owl = 0.9 * exp(-2.37)/365 .* (fraction_dry_mass * owl_mass) .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
 
             # other owl-specific parameters
-            GGE = 0.05   
+            GGE = 0.02  
             h_owl = 0.02
 
                 struct to_pass
@@ -239,7 +241,7 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
 end
 
 
-WhichDataSet = 7
+WhichDataSet = 2
 
 fig = Figure(size = (1000,700))
     ax1 = Axis(fig[1,1], title = "Prey")
