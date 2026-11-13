@@ -257,8 +257,13 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
             fraction_dry_mass = 0.3
             d_owl = exp(-2.37)/365 .* (fraction_dry_mass * owl_mass) .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
 
+            # using another approach
+            # average lifespan of barn owl is about four years
+            lifespan = 4*365
+            d_owl = 1/lifespan # this value seems a little more realistic than the allometric
+
             # other owl-specific parameters
-            GGE = 0.02
+            GGE = 0.03
             h_owl = 0.02
 
                 struct to_pass
@@ -283,7 +288,7 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 end
 
 
-WhichDataSet = 50
+WhichDataSet = 313
 
 fig = Figure(size = (1000,700))
     ax1 = Axis(fig[1,1], title = "Prey")
