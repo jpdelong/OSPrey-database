@@ -7,10 +7,10 @@ function BAOW_model(du, u, p, t)
     h_owl = p.h_owl 
 
     # current states
-    R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, O = u
+    R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, O = u
 
     # sum up all the prey
-    R_all = R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10 + R11
+    R_all = R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10 + R11 + R12
 
     # universal functional response denominator
     O_denominator = 1 + a_owl * h_owl * R_all
@@ -29,11 +29,12 @@ function BAOW_model(du, u, p, t)
     du[9] =  r_max[9] * R9   * (1 - (R9 + 0.5  * (R_all - R9))  / K[9])  - a_owl * R9 * O / O_denominator
     du[10] = r_max[10] * R10 * (1 - (R10 + 0.5 * (R_all - R10)) / K[10]) - a_owl * R10 * O / O_denominator
     du[11] = r_max[11] * R11 * (1 - (R11 + 0.5 * (R_all - R11)) / K[11]) - a_owl * R11 * O / O_denominator
+    du[12] = r_max[12] * R12 * (1 - (R12 + 0.5 * (R_all - R12)) / K[12]) - a_owl * R12 * O / O_denominator
 
     # owl equation
     owl_births = (GGE/owl_mass) * a_owl * sum(p.masses .* R_all) * O / O_denominator
     owl_deaths = d_owl * O
-    du[12] = owl_births - owl_deaths
+    du[13] = owl_births - owl_deaths
 
     return nothing
 end

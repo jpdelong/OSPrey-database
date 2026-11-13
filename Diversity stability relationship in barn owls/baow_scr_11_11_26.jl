@@ -66,31 +66,38 @@ mainr2 = r2(density_model_2)
 df_baow = CSV.read("BarnOwlDiets_20.csv",DataFrame) # read in diet data
     deleteat!(df_baow, df_baow.DataSet .== 2255) # there's one dataset (#2255) that was done without individuals
 
+    unique(df_baow.DataSet)
+
+    # reduce to only rows with prey identified to species or genus
+        df_baow = filter(row -> row.IDLevel == "Species" || row.IDLevel == "Genus", df_baow)
+
+    # drop everything but mammals
+        df_baow = df_baow[occursin.("Mammalia", df_baow.PreyClass), :] # reduce the data set to only mammal prey
+
+    # drop rows with 0 body mass ======= NEED TO COME BACK AND FIND THESE MASSES
+        df_baow = df_baow[findall(df_baow.PreyMass .!= 0),:] # drop rows with 0 body mass
+
+    # drop rows with Afrosoricida - no density estimates for this order
+        df_baow = df_baow[findall(df_baow.PreyOrder .!= "Afrosoricida"),:] # drop rows with 0 body mass
+
 df_meta = CSV.read("BarnOwlMeta_20.csv",DataFrame) # read in diet data
     deleteat!(df_meta, df_meta.DataSet .== 2255) # there's one dataset (#2255) that was done without individuals
+    unique(df_meta.DataSet)
 
-# grab some descriptive information
-    datasets = unique(df_baow.DataSet) # need this for the loop below
-    preycats = unique(df_baow.PreyClass)
-    howmanystudies = length(unique(df_baow.DataSet))
-    datasets_used = sum(df_meta.Num_obs .> 20)
+# going to work with only the datasets that have prey per pellet data
+# we can directly eliminate rows withoout ppp in df_meta    
+df_meta_ppp = dropmissing(df_meta,:PreyPerPellet)
 
-# reduce to only rows with prey identified to species or genus
-    df_baow = filter(row -> row.IDLevel == "Species" || row.IDLevel == "Genus", df_baow)
+    howmanystudies = length(unique(df_meta_ppp.DataSet))
 
-# drop everything but mammals
-    df_baow = df_baow[occursin.("Mammalia", df_baow.PreyClass), :] # reduce the data set to only mammal prey
+# in df_baow, we have to identify the datasets by id to drop them
+idx_to_drop = ismissing.(df_meta.PreyPerPellet) # which dataset ids have no ppp
+datasets_to_keep = df_meta.DataSet[findall(idx_to_drop .== 0)]
 
-# summarize by mammal order
-    sums_by_order = combine(groupby(df_baow, :PreyOrder), :CountInt => sum => :TotalSum)
-    prop_rodent = sums_by_order.TotalSum[1] / sum(sums_by_order.TotalSum[:])
-    which_orders = sums_by_order.PreyOrder
-
-# drop rows with 0 body mass ======= NEED TO COME BACK AND FIND THESE MASSES
-    df_baow = df_baow[findall(df_baow.PreyMass .!= 0),:] # drop rows with 0 body mass
-
-# drop rows with Afrosoricida - no density estimates for this order
-    df_baow = df_baow[findall(df_baow.PreyOrder .!= "Afrosoricida"),:] # drop rows with 0 body mass
+df_baow_ppp = DataFrame[]
+for i = 1:length(datasets_to_keep)
+    push!(df_baow_ppp,df_baow[df_baow.DataSet .== datasets_to_keep[i],:]) # keep the ones that aren't missing
+end
 
 # add the log10 of prey mass
     df_baow[!, :LogMass] = log10.(df_baow.PreyMass) 
@@ -109,22 +116,19 @@ numb_prey_spp = zeros(Float64, howmanystudies)
 baow_a_store = zeros(Float64, howmanystudies)
 NE_rate = Array{Union{Float64,Missing}}(missing, howmanystudies)
 sum_R = zeros(Float64, howmanystudies)
-all_solutions = Matrix{Float64}[]
-t_solution = []
+
 # ==========================================================================================
-###### step 4, # cycle through the datasets to generate ranks, slopes, and diversity metrics
+###### step 4, # cycle through the datasets to generate 
 # ==========================================================================================
 
 baow_h = 0.02 # choose this if you want to run the main analysis
 
-include("BAOW_model.jl")
+diet_datasets = DataFrame[]
 
-for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
+for i = 1:howmanystudies # in this loop, run through all the different diets
     println(i)
-    j = df_meta.DataSet[i]
-    rare_richness = df_meta.DietRichness_rare[j]
-    df_diet = DataFrame()
-    new_x = DataFrame()
+    j = df_meta_ppp.DataSet[i]
+    rare_richness = df_meta_ppp.DietRichness_rare[i]
     df_diet = df_baow[findall(df_baow.DataSet .== [j]),:]
 
     ################## check for the presence of prey identified only to genus
@@ -150,11 +154,11 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
     end
     ################## end of re-distribution block
 
-    if sum(df_diet.CountInt) > 20 && rare_richness < 12
-    #if !isempty(df_diet)
+    if sum(df_diet.CountInt) > 0
         numb_diet = df_diet.CountInt
         mass_diet = df_diet.LogMass
         order_diet = df_diet.PreyOrder
+        new_x = DataFrame()
         new_x[!, :LogMass] = df_diet.LogMass
         new_x[!, :Order] = order_diet
 
@@ -165,23 +169,64 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
         df_diet[!, :LogDensity] = df_predict_y
         df_diet[!, :Density] = 10 .^ (df_diet.LogDensity) # convert to non-log
 
-        #####################################################################################
         # calculate frequencies of diet items
         df_diet[!, :Frequencies] = df_diet.CountInt./ sum(df_diet.CountInt)
+
+        # add the current indexed diet to the vector of diets
+        push!(diet_datasets, df_diet)
 
         # tally number of prey species and individuals
         numb_prey[i] = sum(df_diet.CountInt)
         numb_prey_spp[i] = size(df_diet,1)
 
         # calculate the a for the diet
-        mean_ppp = mean(skipmissing(df_meta.PreyPerPellet))
+        mean_ppp = mean(skipmissing(df_meta_ppp.PreyPerPellet))
         sum_R[i] = sum(df_diet.Density)
-        p3 = df_meta.PreyPerPellet[i]
+        p3 = df_meta_ppp.PreyPerPellet[i]
         if ismissing(p3)
             baow_a = -mean_ppp / (mean_ppp * sum_R[i] * (baow_h - 1))
         else
             baow_a = -p3 / (p3 * sum_R[i] * (baow_h - 1))
             baow_a_store[i] = baow_a
+        end
+    end
+end
+
+# ===================================================
+# put all the processed data into the meta DataFrame
+# ===================================================
+df_meta_ppp[!, :numb_prey] = numb_prey
+df_meta_ppp[!, :numb_prey_spp] = numb_prey_spp
+df_meta_ppp[!, :baow_a] = baow_a_store
+df_meta_ppp[!, :sum_R] = sum_R
+
+#df_meta_no_ppp = df_meta_no_ppp[findall(df_meta_no_ppp.Num_obs .> 20),:] # drop rows with 0 body mass
+
+# ==========================================================================================
+###### step 4, # cycle through the datasets to generate ranks, slopes, and diversity metrics
+# ==========================================================================================
+
+all_solutions = Matrix{Float64}[]
+t_solution = []
+
+include("BAOW_model.jl")
+
+for i = 1:howmanystudies # in this loop, run through all the different diets
+    println(i)
+
+    df_diet = diet_datasets[i]
+    rare_richness = Int(round(df_meta_ppp.DietRichness_rare[i], digits = 0))
+    if rare_richness > size(df_diet,1)
+        rare_richness = size(df_diet,1)
+    end
+
+    df_diet = df_diet[sample(1:nrow(df_diet), rare_richness, replace=false), :]
+
+    if sum(df_diet.CountInt) > 20
+
+        # tally number of prey species and individuals
+        numb_prey[i] = sum(df_diet.CountInt)
+        numb_prey_spp[i] = size(df_diet,1)
 
             # ------------------------------------------
             # now set up and call the ODE
@@ -189,31 +234,31 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
             # data drawn from the dataset
             # only do datasets that had prey per pellet data
 
-            u0 = zeros(Float64,12)
+            u0 = zeros(Float64,13)
             u0[1:size(df_diet,1)] = df_diet.Density
-
-            masses = zeros(Float64,11)
-            masses[1:size(df_diet,1)] = 10 .^ df_diet.LogMass 
-
-            densities = zeros(Float64,11)
-            densities[1:size(df_diet,1)] = df_diet.Density
             u0[12] = 0.56
+
+            masses = zeros(Float64,12)
+            masses[1:size(df_diet,1)] = df_diet.PreyMass 
+
+            densities = zeros(Float64,12)
+            densities[1:size(df_diet,1)] = df_diet.Density
 
             r_max = 0.025 .* masses .^ -0.26 # allometry from Blueweiss 1978 Oecologia
             r_max[isinf.(r_max)] .= 0
 
             K = 10 .* densities
-
+            K[K .== 0] .= mean(K)
             # basic model setup
             tspan = [0 3650]
 
             # make owl mortality allometric
             owl_mass = 550
             fraction_dry_mass = 0.3
-            d_owl = 0.9 * exp(-2.37)/365 .* (fraction_dry_mass * owl_mass) .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
+            d_owl = exp(-2.37)/365 .* (fraction_dry_mass * owl_mass) .^ -0.2 # allometric function from McCoy and Gillooly 2008 ECO LETT
 
             # other owl-specific parameters
-            GGE = 0.02  
+            GGE = 0.02
             h_owl = 0.02
 
                 struct to_pass
@@ -222,26 +267,23 @@ for i = 1:8 #:howmanystudies # in this loop, run through all the different diets
                     a_owl::Float64
                     h_owl::Float64
                     masses::Vector{Float64}
-                    densities::Vector{Float64}
                     r_max::Vector{Float64}
                     K::Vector{Float64}
                 end
 
-            p = to_pass(d_owl, GGE, baow_a, h_owl, masses, densities, r_max, K)
+            p = to_pass(d_owl, GGE, baow_a, h_owl, masses, r_max, K)
 
             prob = ODEProblem(BAOW_model, u0, tspan, p)
             sol_p = solve(prob, Tsit5(); saveat=0.1)
 
             push!(all_solutions, Array(sol_p))
 
-        end
     end
-
     t_solution = sol_p.t
 end
 
 
-WhichDataSet = 2
+WhichDataSet = 50
 
 fig = Figure(size = (1000,700))
     ax1 = Axis(fig[1,1], title = "Prey")
@@ -261,14 +303,7 @@ axislegend(ax1)
 
 
 
-# ===================================================
-# put all the processed data into the meta DataFrame
-# ===================================================
-df_meta[!, :numb_prey] = numb_prey
-df_meta[!, :numb_prey_spp] = numb_prey_spp
-df_meta[!, :baow_a] = baow_a_store
-df_meta[!, :NE_intake] = NE_rate
-df_meta[!, :sum_R] = sum_R
+
 
 # drop every row below the 20 prey cut-off
 df_meta2 = df_meta[findall(df_meta.Num_obs .> 20),:] # drop rows with 0 body mass
