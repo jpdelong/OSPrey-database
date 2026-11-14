@@ -217,6 +217,11 @@ t_solution = []
 
 include("BAOW_model.jl")
 
+plots_dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Diversity stability relationship in barn owls/plots/"
+isdir(plots_dir) || mkpath(plots_dir)  
+
+mean_or_prey_specific_a = 1 # mean is 1, prey-specific is 2
+
 for i = 1:howmanystudies # in this loop, run through all the different diets
     println(i)
 
@@ -228,7 +233,7 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 
     df_diet = df_diet[sample(1:nrow(df_diet), rare_richness, replace=false), :]
 
-    if sum(df_diet.CountInt) > 20
+    if sum(df_diet.CountInt) > 0
 
         # tally number of prey species and individuals
         numb_prey[i] = sum(df_diet.CountInt)
@@ -242,7 +247,7 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 
             u0 = zeros(Float64,13)
             u0[1:size(df_diet,1)] = df_diet.Density
-            u0[12] = 0.56
+            u0[13] = 0.56
 
             masses = zeros(Float64,12)
             masses[1:size(df_diet,1)] = df_diet.PreyMass 
@@ -268,6 +273,13 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
             lifespan = 4*365
             d_owl = 1/lifespan # this value seems a little more realistic than the allometric
 
+            if mean_or_prey_specific_a == 1
+                a_owl = df_meta_ppp.baow_a[i]
+            elseif mean_or_prey_specific_a == 2
+                # pull out the prey specific space clearance rates
+                a_owl = baow_a_all[i]
+            end
+            
             # other owl-specific parameters
             GGE = 0.03
             h_owl = 0.02
@@ -275,26 +287,37 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
                 struct to_pass
                     d_owl::Float64
                     GGE::Float64
-                    a_owl::Float64
+                    a_owl::Any
                     h_owl::Float64
                     masses::Vector{Float64}
                     r_max::Vector{Float64}
                     K::Vector{Float64}
                 end
 
-            p = to_pass(d_owl, GGE, baow_a, h_owl, masses, r_max, K)
+            p = to_pass(d_owl, GGE, a_owl, h_owl, masses, r_max, K)
 
             prob = ODEProblem(BAOW_model, u0, tspan, p)
             sol_p = solve(prob, Tsit5(); saveat=0.1)
 
             push!(all_solutions, Array(sol_p))
 
+            # make and save a plot for each simulation
+            fig = Figure(size = (700,400))
+                ax1 = Axis(fig[1,1], title = "Prey")
+                ax2 = Axis(fig[1,2],title = "Barn Owls")
+            for q in 1:12
+                lines!(ax1, sol_p.t, sol_p[q,:])
+            end
+            lines!(ax2, sol_p.t, sol_p[13,:], label="Owls", color=:black)
+            # save plots 
+            save(joinpath(plots_dir, "Simulation_$(i).png"),fig)
+
     end
-    t_solution = sol_p.t
+    #t_solution = sol_p.t
 end
 
 
-WhichDataSet = 313
+WhichDataSet =1
 
 fig = Figure(size = (1000,700))
     ax1 = Axis(fig[1,1], title = "Prey")
@@ -304,10 +327,12 @@ for i in 1:11
     lines!(ax1, t_solution, all_solutions[WhichDataSet][i,:])
 end
 
-lines!(ax2, sol_p.t, sol_p[12,:], label="Owls", color=:black)
+lines!(ax2, sol_p.t, sol_p[13,:], label="Owls", color=:black)
 fig
 
 
+                # save study-by-study plots 
+                save(joinpath(study_dir, "Study_$(i).png"),f_study)
 axislegend(ax1)
 
 
