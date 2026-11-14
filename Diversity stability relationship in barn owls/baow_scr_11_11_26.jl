@@ -124,6 +124,7 @@ sum_R = zeros(Float64, howmanystudies)
 baow_h = 0.02 # choose this if you want to run the main analysis
 
 diet_datasets = DataFrame[]
+baow_a_all = []
 
 for i = 1:howmanystudies # in this loop, run through all the different diets
     println(i)
@@ -189,6 +190,11 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
             baow_a = -p3 / (p3 * sum_R[i] * (baow_h - 1))
             baow_a_store[i] = baow_a
         end
+
+        # get the a for each prey type in the database
+        baow_a_by_prey = -(p3 .* df_diet.Frequencies) ./ ((p3 .* df_diet.Frequencies) .* df_diet.Density .* (baow_h - 1))
+        push!(baow_a_all,baow_a_by_prey) # push it to the array
+
     end
 end
 
