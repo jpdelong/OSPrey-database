@@ -173,8 +173,6 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
         # calculate frequencies of diet items
         df_diet[!, :Frequencies] = df_diet.CountInt./ sum(df_diet.CountInt)
 
-        # add the current indexed diet to the vector of diets
-        push!(diet_datasets, df_diet)
 
         # tally number of prey species and individuals
         numb_prey[i] = sum(df_diet.CountInt)
@@ -193,8 +191,11 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 
         # get the a for each prey type in the database
         baow_a_by_prey = -(p3 .* df_diet.Frequencies) ./ ((p3 .* df_diet.Frequencies) .* df_diet.Density .* (baow_h - 1))
-        push!(baow_a_all,baow_a_by_prey) # push it to the array
+        #push!(baow_a_all,baow_a_by_prey) # push it to the array
+        df_diet[!, :prey_a] = baow_a_by_prey
 
+        # add the current indexed diet to the vector of diets
+        push!(diet_datasets, df_diet)
     end
 end
 
@@ -222,7 +223,7 @@ isdir(plots_dir) || mkpath(plots_dir)
 
 mean_or_prey_specific_a = 1 # mean is 1, prey-specific is 2
 
-for i = 1:howmanystudies # in this loop, run through all the different diets
+for i = 1:10 #howmanystudies # in this loop, run through all the different diets
     println(i)
 
     df_diet = diet_datasets[i]
@@ -258,10 +259,10 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
             r_max = 0.025 .* masses .^ -0.26 # allometry from Blueweiss 1978 Oecologia
             r_max[isinf.(r_max)] .= 0
 
-            K = 10 .* densities
+            K = 5 .* densities
             K[K .== 0] .= mean(K)
             # basic model setup
-            tspan = [0 3650]
+            tspan = [0 3*3650]
 
             # make owl mortality allometric
             owl_mass = 550
@@ -273,21 +274,22 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
             lifespan = 4*365
             d_owl = 1/lifespan # this value seems a little more realistic than the allometric
 
+            a_owl = zeros(Float64,12)
             if mean_or_prey_specific_a == 1
-                a_owl = df_meta_ppp.baow_a[i]
+                a_owl[1:size(df_diet,1)] .= df_meta_ppp.baow_a[i]
             elseif mean_or_prey_specific_a == 2
                 # pull out the prey specific space clearance rates
-                a_owl = baow_a_all[i]
+                a_owl[1:size(df_diet,1)] = df_diet.prey_a
             end
             
             # other owl-specific parameters
-            GGE = 0.03
+            GGE = 0.01
             h_owl = 0.02
 
                 struct to_pass
                     d_owl::Float64
                     GGE::Float64
-                    a_owl::Any
+                    a_owl::Vector{Float64}
                     h_owl::Float64
                     masses::Vector{Float64}
                     r_max::Vector{Float64}
@@ -303,29 +305,31 @@ for i = 1:howmanystudies # in this loop, run through all the different diets
 
             # make and save a plot for each simulation
             fig = Figure(size = (700,400))
-                ax1 = Axis(fig[1,1], title = "Prey")
-                ax2 = Axis(fig[1,2],title = "Barn Owls")
+                ax1 = Axis(fig[1,1], title = string(rare_richness," prey species"))
+                ax2 = Axis(fig[1,2], title = "Barn Owls")
             for q in 1:12
                 lines!(ax1, sol_p.t, sol_p[q,:])
             end
+            #text!(ax1, 1000, 1000, text = string("Number of prey = ",rare_richness))
             lines!(ax2, sol_p.t, sol_p[13,:], label="Owls", color=:black)
             # save plots 
             save(joinpath(plots_dir, "Simulation_$(i).png"),fig)
 
     end
-    #t_solution = sol_p.t
+    t_solution = sol_p.t
 end
 
 
 WhichDataSet =1
 
 fig = Figure(size = (1000,700))
-    ax1 = Axis(fig[1,1], title = "Prey")
+    ax1 = Axis(fig[1,1], title = string(rare_richness," prey species"))
     ax2 = Axis(fig[1,2],title = "Barn Owls")
 
-for i in 1:11
+for i in 1:12
     lines!(ax1, t_solution, all_solutions[WhichDataSet][i,:])
 end
+text!(ax1, 1000, 500, text = string("Number of prey = ",rare_richness))
 
 lines!(ax2, sol_p.t, sol_p[13,:], label="Owls", color=:black)
 fig
