@@ -14,7 +14,7 @@ function BAOW_model(du, u, p, t)
     R_all = R1 + R2 + R3 + R4 + R5 + R6 + R7 + R8 + R9 + R10 + R11 + R12
 
     # universal functional response denominator
-    O_denominator = 1 + h_owl .* sum(a_owl .* (u[1:12].-G)) + 0.1 * O
+    O_denominator = 1 + h_owl .* sum(a_owl .* max.(u[1:12].-G)) + 0.01 * O
 
     # Evaluate differential equations
 
@@ -33,7 +33,7 @@ function BAOW_model(du, u, p, t)
     du[12] = r_max[12] * R12 * (1 - (R12 + 0.25 * (R_all - R12)) / K[12]) - a_owl[12] * (R12-G) * O / O_denominator
 
     # owl equation
-    owl_births = (GGE/owl_mass) .* sum(a_owl .* p.masses .* (u[1:12].-G)) * O / O_denominator
+    owl_births = (GGE/owl_mass) .* sum(a_owl .* p.masses .* max.(u[1:12].-G)) * O / O_denominator
     owl_deaths = d_owl * O
     du[13] = owl_births - owl_deaths
 

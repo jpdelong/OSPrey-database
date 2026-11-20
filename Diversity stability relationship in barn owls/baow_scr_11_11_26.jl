@@ -259,10 +259,10 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
             r_max = 0.025 .* masses .^ -0.26 # allometry from Blueweiss 1978 Oecologia
             r_max[isinf.(r_max)] .= 0
 
-            K = 5 .* densities
+            K = 7 .* densities
             K[K .== 0] .= mean(K)
             # basic model setup
-            tspan = [0 3*3650]
+            tspan = [0 5*3650]
 
             # make owl mortality allometric
             owl_mass = 550
@@ -271,7 +271,7 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
 
             # using another approach
             # average lifespan of barn owl is about four years
-            lifespan = 4*365
+            lifespan = 5*365
             d_owl = 1/lifespan # this value seems a little more realistic than the allometric
 
             a_owl = zeros(Float64,12)
@@ -307,6 +307,7 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
             fig = Figure(size = (700,400))
                 ax1 = Axis(fig[1,1], title = string(rare_richness," prey species"))
                 ax2 = Axis(fig[1,2], title = "Barn Owls")
+                ylims!(ax2,[0,10])
             for q in 1:12
                 lines!(ax1, sol_p.t, sol_p[q,:])
             end
