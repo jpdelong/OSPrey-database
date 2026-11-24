@@ -221,7 +221,7 @@ include("BAOW_model.jl")
 plots_dir = "C:/Users/93652672/OneDrive - University of Nebraska/Documents/GitHub/OSPrey-database/Diversity stability relationship in barn owls/plots/"
 isdir(plots_dir) || mkpath(plots_dir)  
 
-mean_or_prey_specific_a = 1 # mean is 1, prey-specific is 2
+mean_or_prey_specific_a = 2 # mean is 1, prey-specific is 2
 
 for i = 1:10 #howmanystudies # in this loop, run through all the different diets
     println(i)
@@ -287,6 +287,7 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
             h_owl = 0.02
 
                 struct to_pass
+                    owl_mass::Float64
                     d_owl::Float64
                     GGE::Float64
                     a_owl::Vector{Float64}
@@ -296,7 +297,7 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
                     K::Vector{Float64}
                 end
 
-            p = to_pass(d_owl, GGE, a_owl, h_owl, masses, r_max, K)
+            p = to_pass(owl_mass,d_owl, GGE, a_owl, h_owl, masses, r_max, K)
 
             prob = ODEProblem(BAOW_model, u0, tspan, p)
             sol_p = solve(prob, Tsit5(); saveat=0.1)
@@ -320,6 +321,28 @@ for i = 1:10 #howmanystudies # in this loop, run through all the different diets
     t_solution = sol_p.t
 end
 
+num_extant_prey = zeros(Float64, howmanystudies)
+rare_richness = zeros(Float64, howmanystudies)
+
+for i = 1:10 #howmanystudies # in this loop, run through all the different diets
+    println(i)
+
+    df_diet = diet_datasets[i]
+    rare_richness[i] = Int(round(df_meta_ppp.DietRichness_rare[i], digits = 0))
+
+    check_extinction = all_solutions[i]
+    num_low = sum(vec(any(check_extinction[1:12,:] .< 0.5, dims=2)))
+    num_extant_prey[i] = rare_richness[i] - (num_low - (12 - rare_richness[i])) 
+
+
+end
+
+
+
+
+
+
+##################################
 
 WhichDataSet =1
 
@@ -336,9 +359,6 @@ lines!(ax2, sol_p.t, sol_p[13,:], label="Owls", color=:black)
 fig
 
 
-                # save study-by-study plots 
-                save(joinpath(study_dir, "Study_$(i).png"),f_study)
-axislegend(ax1)
 
 
 
@@ -362,6 +382,11 @@ df_meta2 = CSV.read("BarnOwlProcessed_20.csv",DataFrame) # read in density data
 # ====================================================================
 # ====================================================================
 
+# open up a figure, set up starting versus ending species number
+f_prey_loss = Figure()
+    ax_prey_loss = Axis(f_prey_loss[1, 1], xlabel = "Starting richness", ylabel = "Ending richness")
+    scatter!(rare_richness, num_extant_prey, color = :black, alpha=0.8)
+    lines!(ax_prey_loss, [0,10], [0,10], color = :blue)
 
 
 # ====================================================================

@@ -1,11 +1,14 @@
 function BAOW_model(du, u, p, t)
 
     # parameters
+    owl_mass = p.owl_mass
     d_owl = p.d_owl
     GGE = p.GGE
     a_owl = p.a_owl
-    h_owl = p.h_owl 
-    G = 50
+    h_owl = p.h_owl
+    r_max = p.r_max
+    K = p.K
+    G = 10
 
     # current states
     R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, O = u
